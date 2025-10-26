@@ -10,36 +10,54 @@ export const prisma = {
   // Usuarios
   usuario: {
     async findMany(options: any = {}) {
-      const { take = 50, skip = 0, select, where } = options
-      
-      let query = supabase.from('usuarios').select(select ? Object.keys(select).join(', ') : '*')
-      
-      if (where) {
-        // Aplicar filtros avanzados
-        Object.keys(where).forEach(key => {
-          if (where[key] !== undefined) {
-            if (typeof where[key] === 'object' && where[key] !== null) {
-              // Manejar filtros complejos como { contains: '...', mode: 'insensitive' }
-              if (where[key].contains) {
-                query = query.ilike(key, `%${where[key].contains}%`)
-              }
-            } else {
-              query = query.eq(key, where[key])
-            }
+      try {
+        const { take = 50, skip = 0, select, where } = options
+        
+        // Handle select field properly for Supabase
+        let selectFields = '*'
+        if (select) {
+          if (typeof select === 'string') {
+            selectFields = select
+          } else if (typeof select === 'object') {
+            selectFields = Object.keys(select).join(', ')
           }
-        })
+        }
+        
+        let query = supabase.from('usuarios').select(selectFields)
+        
+        if (where) {
+          // Aplicar filtros avanzados
+          Object.keys(where).forEach(key => {
+            if (where[key] !== undefined) {
+              if (typeof where[key] === 'object' && where[key] !== null) {
+                // Manejar filtros complejos como { contains: '...', mode: 'insensitive' }
+                if (where[key].contains) {
+                  query = query.ilike(key, `%${where[key].contains}%`)
+                }
+              } else {
+                query = query.eq(key, where[key])
+              }
+            }
+          })
+        }
+        
+        if (skip) {
+          query = query.range(skip, skip + take - 1)
+        } else if (take) {
+          query = query.limit(take)
+        }
+        
+        const { data, error } = await query
+        
+        if (error) {
+          console.error('Prisma findMany error:', error)
+          throw error
+        }
+        return data || []
+      } catch (error: any) {
+        console.error('Error in prisma.usuario.findMany:', error)
+        return []
       }
-      
-      if (skip) {
-        query = query.range(skip, skip + take - 1)
-      } else if (take) {
-        query = query.limit(take)
-      }
-      
-      const { data, error } = await query
-      
-      if (error) throw error
-      return data || []
     },
 
     async findUnique(options: any) {
