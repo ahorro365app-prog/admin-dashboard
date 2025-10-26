@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 
+// Forzar exportación dinámica
+export const dynamic = 'force-dynamic'
+
 export default function TestPage() {
   const [result, setResult] = useState<any>(null)
   const [loading, setLoading] = useState(false)
