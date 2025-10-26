@@ -64,7 +64,7 @@ export function AdvancedAnalytics() {
       console.log('📊 Fetching advanced analytics data...')
 
       const [chartsResponse, analyticsResponse] = await Promise.all([
-        fetch(`/api/analytics/advanced-charts?period=${selectedPeriod}`),
+        fetch(`/api/analytics/charts-v2?period=${selectedPeriod}`),
         fetch('/api/analytics/overview')
       ])
 
