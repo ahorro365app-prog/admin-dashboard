@@ -6,8 +6,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const period = searchParams.get('period') || '7d'
+    const period = request.nextUrl.searchParams.get('period') || '7d'
     
     console.log('📊 Fetching advanced charts data for period:', period)
 
