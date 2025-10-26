@@ -10,9 +10,9 @@ export async function GET(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Verificar si la tabla users existe y qué datos tiene
+    // Verificar si la tabla usuarios existe y qué datos tiene
     const { data: users, error: usersError } = await supabase
-      .from('users')
+      .from('usuarios')
       .select('*')
       .limit(5)
 
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     // Verificar otras tablas que podrían existir
     const { data: transactions, error: transactionsError } = await supabase
-      .from('transactions')
+      .from('transacciones')
       .select('*')
       .limit(5)
 
@@ -64,5 +64,6 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
 
 

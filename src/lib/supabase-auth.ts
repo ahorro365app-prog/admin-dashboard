@@ -194,10 +194,10 @@ export async function getUserStats() {
     // Obtener transacciones de hoy
     const today = new Date().toISOString().split('T')[0]
     const { count: todayTransactions, error: todayError } = await supabase
-      .from('transactions')
+      .from('transacciones')
       .select('*', { count: 'exact', head: true })
-      .gte('date', `${today}T00:00:00`)
-      .lte('date', `${today}T23:59:59`)
+      .gte('fecha', `${today}T00:00:00`)
+      .lte('fecha', `${today}T23:59:59`)
 
     if (todayError) {
       console.error('Error getting today transactions:', todayError)

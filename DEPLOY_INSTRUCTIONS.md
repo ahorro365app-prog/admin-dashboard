@@ -100,3 +100,4 @@ Si tienes problemas con el deploy, verifica:
 1. Variables de entorno configuradas correctamente
 2. Conexión a Supabase funcionando
 3. Tabla `admin_users` creada en la base de datos
+
