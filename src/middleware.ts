@@ -23,7 +23,7 @@ export function middleware(request: NextRequest) {
 
   if (!token) {
     console.log('❌ No token, redirecting to login')
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(new URL('/login', request.nextUrl.origin))
   }
 
   console.log('✅ Token found, allowing access:', pathname)

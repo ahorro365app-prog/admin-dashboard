@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     console.log('👥 Fetching users with filters and pagination...')
     
-    const { searchParams } = new URL(request.url)
+    const searchParams = request.nextUrl.searchParams
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const search = searchParams.get('search') || ''
@@ -132,7 +134,7 @@ export async function DELETE(request: NextRequest) {
   try {
     console.log('🗑️ Deleting user...')
     
-    const { searchParams } = new URL(request.url)
+    const searchParams = request.nextUrl.searchParams
     const id = searchParams.get('id')
 
     if (!id) {
