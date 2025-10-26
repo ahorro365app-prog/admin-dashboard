@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-// Forzar renderizado dinámico - Vercel cache fix
+// Forzar renderizado dinámico
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
+    // Usar nextUrl en lugar de request.url
     const period = request.nextUrl.searchParams.get('period') || '7d'
     
     console.log('📊 Fetching advanced charts data for period:', period)
@@ -156,4 +157,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
