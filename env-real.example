@@ -1,0 +1,43 @@
+# Panel Administrativo - Variables de Entorno REALES
+# Copia este archivo como .env.local y configura tus valores REALES
+
+# ===========================================
+# CONFIGURACIÓN DE SUPABASE (OBLIGATORIO)
+# ===========================================
+# Ve a: https://supabase.com/dashboard
+# Selecciona tu proyecto > Settings > API
+# Copia los valores de abajo:
+
+NEXT_PUBLIC_SUPABASE_URL="https://tu-proyecto.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1LXByb3llY3RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTk5OTk5OTksImV4cCI6MjAxNTU3NTk5OX0.ejemplo"
+SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1LXByb3llY3RvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY5OTk5OTk5OSwiZXhwIjoyMDE1NTc1OTk5fQ.ejemplo"
+
+# ===========================================
+# CONFIGURACIÓN JWT (OBLIGATORIO)
+# ===========================================
+# Genera una clave secreta segura para JWT
+# Puedes usar: https://generate-secret.vercel.app/32
+JWT_SECRET="tu_jwt_secret_super_seguro_de_32_caracteres_minimo"
+
+# ===========================================
+# CONFIGURACIÓN DEL PANEL (OPCIONAL)
+# ===========================================
+# Credenciales del administrador inicial
+ADMIN_EMAIL="admin@demo.com"
+ADMIN_PASSWORD="admin123"
+
+# Puerto del servidor
+PORT=3001
+
+# Entorno
+NODE_ENV="development"
+
+# ===========================================
+# INSTRUCCIONES DE CONFIGURACIÓN
+# ===========================================
+# 1. Copia este archivo como .env.local
+# 2. Reemplaza los valores de Supabase con los reales
+# 3. Genera un JWT_SECRET seguro
+# 4. Ejecuta el script SQL en Supabase
+# 5. Reinicia el servidor: npm run dev
+

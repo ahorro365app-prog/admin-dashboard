@@ -1,0 +1,23 @@
+# Panel Administrativo - Variables de Entorno
+# Usando las mismas credenciales de Supabase de la app principal
+
+# Supabase Configuration (mismas credenciales de la app principal)
+NEXT_PUBLIC_SUPABASE_URL=https://dojalqbebxsqufzvebis.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvamFscWJlYnhzcXVmenZlYmlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzNjg2NzcsImV4cCI6MjA3NTk0NDY3N30.7lMx8V2Vvg3t6kJOFriF4f9qWf696vAA35pu4NxqiL4
+
+# Clave de servicio de Supabase (necesaria para operaciones administrativas)
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvamFscWJlYnhzcXVmenZlYmlzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDM2ODY3NywiZXhwIjoyMDc1OTQ0Njc3fQ.aOVmFJ7aqaVkgwA5p2rVLlKIZf2FEE-6slOlJ5nN5Nk
+
+# JWT Secret para autenticación del panel (generar una clave segura)
+JWT_SECRET=A231irkJQ30rt8sukcUKQeXSJCn8atrQ
+
+# Configuración del panel administrativo
+ADMIN_EMAIL=admin@demo.com
+ADMIN_PASSWORD=admin123
+
+# Puerto del servidor
+PORT=3001
+
+# Entorno
+NODE_ENV=development
+

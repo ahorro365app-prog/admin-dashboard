@@ -1,0 +1,98 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo para usuarios (tabla: usuarios) - Estructura real
+model Usuario {
+  id                String   @id @default(uuid())
+  nombre            String
+  correo            String?  @unique
+  telefono          String?
+  pais              String?
+  moneda            String?
+  presupuesto_diario Float?
+  suscripcion       String?  @default("free")
+  // Nota: created_at y updated_at no existen en la tabla real
+
+  // Relaciones
+  transacciones     Transaccion[]
+  deudas           Deuda[]
+
+  @@map("usuarios")
+}
+
+// Modelo para transacciones (tabla: transacciones)
+model Transaccion {
+  id          String   @id @default(uuid())
+  usuario_id  String
+  tipo        String   // "ingreso" o "gasto"
+  monto       Float
+  descripcion String?
+  categoria   String?
+  fecha       DateTime
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Relaciones
+  usuario     Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  @@map("transacciones")
+}
+
+// Modelo para deudas (tabla: deudas)
+model Deuda {
+  id          String   @id @default(uuid())
+  usuario_id  String
+  nombre      String
+  monto_total Float
+  monto_pagado Float   @default(0)
+  descripcion String?
+  fecha_inicio DateTime
+  fecha_limite DateTime?
+  estado      String   @default("activa") // "activa", "pagada", "vencida"
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Relaciones
+  usuario     Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+  pagos       Pago[]
+
+  @@map("deudas")
+}
+
+// Modelo para pagos de deudas (tabla: pagos)
+model Pago {
+  id          String   @id @default(uuid())
+  deuda_id    String
+  monto       Float
+  fecha       DateTime
+  descripcion String?
+  comprobante String?  // URL o path del comprobante
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Relaciones
+  deuda       Deuda    @relation(fields: [deuda_id], references: [id], onDelete: Cascade)
+
+  @@map("pagos")
+}
+
+// Modelo para usuarios administradores (tabla: admin_users)
+model AdminUser {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password_hash String
+  role          String   @default("admin")
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@map("admin_users")
+}
