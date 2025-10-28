@@ -9,6 +9,7 @@ import {
   UserCheck, 
   BarChart3, 
   Settings,
+  MessageCircle,
   Menu,
   X,
   LogOut
@@ -21,6 +22,7 @@ const navigation = [
   { name: 'Usuarios', href: '/users', icon: Users },
   { name: 'Referidos', href: '/referrals', icon: UserCheck },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'WhatsApp Status', href: '/whatsapp-status', icon: MessageCircle },
   { name: 'Configuración', href: '/settings', icon: Settings },
 ]
 
