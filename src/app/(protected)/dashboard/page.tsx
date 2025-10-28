@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { StatsCards } from '@/components/dashboard/StatsCards'
 import { ActivitiesTable } from '@/components/dashboard/ActivitiesTable'
 
@@ -39,7 +39,7 @@ export default function DashboardPage() {
   const [error, setError] = useState('')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       console.log('📊 Fetching dashboard data...')
       
@@ -84,16 +84,29 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchDashboardData()
     
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchDashboardData, 30000)
+    // Auto-refresh every 15 seconds instead of 30 for better real-time feel
+    const interval = setInterval(fetchDashboardData, 15000)
     
     return () => clearInterval(interval)
   }, [])
+  
+  // Force immediate refresh when tab becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && data) {
+        console.log('🔄 Tab is visible again, refreshing data...')
+        fetchDashboardData()
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [data, fetchDashboardData])
 
   const handleRefresh = () => {
     setLoading(true)
