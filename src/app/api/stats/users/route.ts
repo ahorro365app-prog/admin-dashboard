@@ -8,9 +8,14 @@ export async function GET(request: NextRequest) {
     // Total Users
     const totalUsers = await prisma.usuario.count()
 
-    // Premium Users
+    // Premium Users - check for premium subscription
     const premiumUsers = await prisma.usuario.count({
-      where: { suscripcion: 'premium' }
+      where: { 
+        OR: [
+          { suscripcion: 'premium' },
+          { suscripcion: { contains: 'premium', mode: 'insensitive' } }
+        ]
+      }
     })
 
     // Today's Transactions - Filtrar por fecha de hoy
@@ -19,16 +24,27 @@ export async function GET(request: NextRequest) {
       const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
       console.log('📅 Filtrando transacciones de hoy:', today)
       
+      // Try different date approaches
+      const startOfDay = `${today}T00:00:00`
+      const endOfDay = `${today}T23:59:59`
+      
+      // First try with timestamp comparison
       todayTransactions = await prisma.transaccion.count({
         where: {
           fecha: {
-            gte: `${today}T00:00:00`,
-            lte: `${today}T23:59:59`
+            gte: startOfDay,
+            lte: endOfDay
           }
         }
       })
       
-      console.log('📊 Transacciones de hoy encontradas:', todayTransactions)
+      // Log for debugging
+      console.log('📅 Filtrando transacciones de:', {
+        today,
+        startOfDay,
+        endOfDay,
+        found: todayTransactions
+      })
     } catch (error) {
       console.log('Tabla transacciones no disponible o error en filtro de fecha:', error)
     }
