@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, RefreshCw, X } from 'lucide-react';
+import { Loader2, RefreshCw, X, Terminal, RotateCcw, Link as LinkIcon } from 'lucide-react';
 
 interface StatusData {
   status: 'connected' | 'disconnected';
@@ -14,12 +14,36 @@ export default function StatusCard() {
   const [data, setData] = useState<StatusData | null>(null);
   const [loading, setLoading] = useState(true);
   const [reconnecting, setReconnecting] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logs, setLogs] = useState<string>('');
 
   const fetchStatus = async () => {
     try {
+      // 1) Intentar leer directamente del Worker (estado en tiempo real)
+      const workerUrl = process.env.NEXT_PUBLIC_BAILEYS_WORKER_URL;
+      if (workerUrl) {
+        try {
+          const wr = await fetch(`${workerUrl}/status`, { cache: 'no-store' });
+          if (wr.ok) {
+            const wd = await wr.json();
+            const mapped = {
+              status: wd.connected ? 'connected' as const : 'disconnected' as const,
+              uptime: wd.uptime ?? 0,
+              number: wd.number ?? 'N/A',
+              lastSync: wd.lastSync ?? null,
+            };
+            setData(mapped);
+            return;
+          }
+        } catch {
+          // Ignorar fallo y caer al backend del admin
+        }
+      }
+
+      // 2) Fallback: endpoint del Admin (Supabase)
       const res = await fetch('/api/whatsapp/status');
-      const data = await res.json();
-      setData(data);
+      const d = await res.json();
+      setData(d);
     } catch (error) {
       console.error('Failed to fetch status:', error);
     } finally {
@@ -45,6 +69,31 @@ export default function StatusCard() {
       alert('Reconnection failed');
     } finally {
       setReconnecting(false);
+    }
+  };
+
+  const handleFlyRestart = async () => {
+    try {
+      const res = await fetch('/api/fly/restart', { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Restart failed');
+      alert('Worker reiniciado en Fly. Espera 10-20s...');
+      setTimeout(fetchStatus, 12000);
+    } catch (e: any) {
+      alert('Error reiniciando: ' + (e?.message || ''));
+    }
+  };
+
+  const handleFetchLogs = async () => {
+    try {
+      setShowLogs(true);
+      setLogs('Cargando logs...');
+      const res = await fetch('/api/fly/logs');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '');
+      setLogs(data.logs || '');
+    } catch (e: any) {
+      setLogs('Error obteniendo logs: ' + (e?.message || ''));
     }
   };
 
@@ -139,8 +188,28 @@ export default function StatusCard() {
           </span>
         </div>
 
+        {/* Recovery Banner when Disconnected */}
+        {!isConnected && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg mb-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <h4 className="font-semibold text-red-900 mb-1">⚠️ WhatsApp Desconectado</h4>
+                <p className="text-red-800 text-sm mb-3">
+                  La sesión se desconectó. Usa la guía de recuperación paso a paso para reconectar desde cero.
+                </p>
+                <a
+                  href="/whatsapp-status/recuperar-sesion"
+                  className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                >
+                  📖 Abrir Guía de Recuperación
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-3 mt-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
           <button
             onClick={handleReconnect}
             disabled={reconnecting || disconnecting}
@@ -175,6 +244,29 @@ export default function StatusCard() {
               </>
             )}
           </button>
+
+          <button
+            onClick={handleFlyRestart}
+            className="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 rounded flex items-center justify-center gap-2 transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" /> Reiniciar Worker (Fly)
+          </button>
+
+          <button
+            onClick={handleFetchLogs}
+            className="bg-slate-600 hover:bg-slate-700 text-white font-semibold py-2 rounded flex items-center justify-center gap-2 transition-colors"
+          >
+            <Terminal className="w-4 h-4" /> Ver Logs
+          </button>
+
+          <a
+            href={`${process.env.NEXT_PUBLIC_BAILEYS_WORKER_URL || ''}/qr/view`}
+            target="_blank"
+            rel="noreferrer"
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 rounded flex items-center justify-center gap-2 transition-colors"
+          >
+            <LinkIcon className="w-4 h-4" /> Ver QR (Fly)
+          </a>
         </div>
       </div>
 
@@ -215,6 +307,21 @@ export default function StatusCard() {
                 Desconectar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Logs Modal */}
+      {showLogs && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-4 max-w-3xl w-full mx-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">Logs Fly (últimos)</h3>
+              <button onClick={() => setShowLogs(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <pre className="text-xs bg-gray-900 text-green-200 rounded p-3 max-h-[60vh] overflow-auto whitespace-pre-wrap">{logs}</pre>
           </div>
         </div>
       )}
