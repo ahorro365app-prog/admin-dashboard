@@ -108,14 +108,15 @@ export async function POST(req: NextRequest) {
     console.log('✅ Prediction saved:', prediction?.id);
 
     // 7. Crear transacción en tabla transacciones
+    // Si expenseData es null, usar valores por defecto
     const { data: transaction } = await supabase
       .from('transacciones')
       .insert({
         usuario_id: user.id,
         tipo: 'gasto',
-        monto: expenseData.monto || 0,
-        categoria: expenseData.categoria || 'otros',
-        descripcion: expenseData.descripcion || transcription,
+        monto: expenseData?.monto || 0,
+        categoria: expenseData?.categoria || 'otros',
+        descripcion: expenseData?.descripcion || transcription,
         fecha: new Date(timestamp).toISOString(),
       })
       .select()
@@ -128,9 +129,9 @@ export async function POST(req: NextRequest) {
       transaction_id: transaction?.id,
       transcription,
       expense_data: expenseData,
-      amount: expenseData.monto,
-      currency: expenseData.moneda || 'BOB',
-      category: expenseData.categoria,
+      amount: expenseData?.monto || 0,
+      currency: expenseData?.moneda || 'BOB',
+      category: expenseData?.categoria || 'otros',
       processing_time_ms: Date.now() - startTime,
     });
 
