@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const phoneNumber = from.replace('@s.whatsapp.net', '');
     console.log('📱 WhatsApp audio from:', phoneNumber);
 
-    // 1. Buscar o crear usuario por teléfono
+    // 1. Buscar usuario por teléfono
     let { data: user, error: userError } = await supabase
       .from('usuarios')
       .select('*')
@@ -44,32 +44,14 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (userError || !user) {
-      console.log('👤 Usuario no existe, creando automáticamente...');
+      console.log('❌ Usuario no está registrado:', phoneNumber);
       
-      // Crear usuario automáticamente
-      const { data: newUser, error: createError } = await supabase
-        .from('usuarios')
-        .insert([{
-          nombre: `Usuario ${phoneNumber}`,
-          telefono: phoneNumber,
-          contrasena: 'auto-created',
-          moneda: 'BOB',
-          pais: 'Bolivia',
-          country_code: 'BOL',
-          suscripcion: 'free',
-          whatsapp_habilitado: true,
-          notificaciones_whatsapp: true
-        }])
-        .select()
-        .single();
-      
-      if (createError || !newUser) {
-        console.error('❌ Error creando usuario:', createError);
-        return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
-      }
-      
-      user = newUser;
-      console.log('✅ Usuario creado automáticamente:', user.id);
+      // Retornar error indicando que debe registrarse
+      return NextResponse.json({
+        success: false,
+        error: 'user_not_registered',
+        message: 'Usuario no está registrado en la plataforma'
+      }, { status: 200 }); // Status 200 para que Baileys Worker maneje el mensaje
     } else {
       console.log('✅ Usuario existente encontrado:', user.id);
     }
