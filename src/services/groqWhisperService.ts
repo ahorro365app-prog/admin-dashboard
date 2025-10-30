@@ -24,7 +24,6 @@ export async function transcribeAudioWithGroq(
     formData.append('model', 'whisper-large-v3'); // Usar el mejor modelo de Groq
     formData.append('language', language);
     formData.append('response_format', 'json');
-    formData.append('timestamp_granularities', 'word');
 
     const response = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
