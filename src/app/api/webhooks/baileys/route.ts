@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const phoneNumber = from.replace('@s.whatsapp.net', '');
     console.log('📱 WhatsApp audio from:', phoneNumber);
 
-    // 1. Buscar usuario por teléfono
+    // 1. VERIFICAR SI EL USUARIO ESTÁ REGISTRADO (ANTES de procesar con Groq)
     let { data: user, error: userError } = await supabase
       .from('usuarios')
       .select('*')
@@ -45,8 +45,9 @@ export async function POST(req: NextRequest) {
 
     if (userError || !user) {
       console.log('❌ Usuario no está registrado:', phoneNumber);
+      console.log('💡 Retornando SIN procesar audio (ahorro de recursos de Groq)');
       
-      // Retornar error indicando que debe registrarse
+      // IMPORTANTE: Retornamos SIN procesar el audio para no gastar recursos de Groq
       return NextResponse.json({
         success: false,
         error: 'user_not_registered',
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
       }, { status: 200 }); // Status 200 para que Baileys Worker maneje el mensaje
     } else {
       console.log('✅ Usuario existente encontrado:', user.id);
+      console.log('💡 Continuando con procesamiento de audio...');
     }
 
     // 2. Convertir base64 a Blob
