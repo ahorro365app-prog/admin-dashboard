@@ -36,19 +36,43 @@ export async function POST(req: NextRequest) {
     const phoneNumber = from.replace('@s.whatsapp.net', '');
     console.log('📱 WhatsApp audio from:', phoneNumber);
 
-    // 1. Buscar usuario por teléfono en tabla usuarios
-    const { data: user, error: userError } = await supabase
+    // 1. Buscar o crear usuario por teléfono
+    let { data: user, error: userError } = await supabase
       .from('usuarios')
       .select('*')
       .eq('telefono', phoneNumber)
       .single();
 
     if (userError || !user) {
-      console.error('❌ User not found:', phoneNumber);
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      console.log('👤 Usuario no existe, creando automáticamente...');
+      
+      // Crear usuario automáticamente
+      const { data: newUser, error: createError } = await supabase
+        .from('usuarios')
+        .insert([{
+          nombre: `Usuario ${phoneNumber}`,
+          telefono: phoneNumber,
+          contrasena: 'auto-created',
+          moneda: 'BOB',
+          pais: 'Bolivia',
+          country_code: 'BOL',
+          suscripcion: 'free',
+          whatsapp_habilitado: true,
+          notificaciones_whatsapp: true
+        }])
+        .select()
+        .single();
+      
+      if (createError || !newUser) {
+        console.error('❌ Error creando usuario:', createError);
+        return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
+      }
+      
+      user = newUser;
+      console.log('✅ Usuario creado automáticamente:', user.id);
+    } else {
+      console.log('✅ Usuario existente encontrado:', user.id);
     }
-
-    console.log('✅ User found:', user.id);
 
     // 2. Convertir base64 a Blob
     const audioBuffer = Buffer.from(audioBase64, 'base64');
