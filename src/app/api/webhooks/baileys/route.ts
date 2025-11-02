@@ -115,15 +115,15 @@ export async function POST(req: NextRequest) {
 
     if (type === 'audio') {
       // Para audio: convertir base64 a File y transcribir
-      const audioBuffer = Buffer.from(audioBase64, 'base64');
-      const audioBlob = new Blob([audioBuffer], { type: 'audio/ogg; codecs=opus' });
-      console.log('✅ Audio converted from base64:', audioBlob.size, 'bytes');
+    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/ogg; codecs=opus' });
+    console.log('✅ Audio converted from base64:', audioBlob.size, 'bytes');
 
-      const audioFile = new File([audioBlob], 'audio.ogg', { type: 'audio/ogg; codecs=opus' });
+    const audioFile = new File([audioBlob], 'audio.ogg', { type: 'audio/ogg; codecs=opus' });
 
       // Transcribir con Groq Whisper
       transcription = await groqWhisperService.transcribe(audioFile, 'es');
-      console.log('✅ Transcription:', transcription);
+    console.log('✅ Transcription:', transcription);
     } else {
       // Para texto: usar directamente el texto como "transcripción"
       transcription = text;
@@ -137,47 +137,81 @@ export async function POST(req: NextRequest) {
     );
     console.log('✅ Expense extracted:', expenseData);
 
-    // 5. Guardar predicción con deduplicación (si trae wa_message_id)
+    // 5. Guardar predicción con deduplicación Y timestamp original
+    const now = new Date().toISOString();
     const { cached, data: prediction } = await insertPredictionWithDedup({
-      usuario_id: user.id,
-      country_code: user.country_code || 'BOL',
-      transcripcion: transcription,
+        usuario_id: user.id,
+        country_code: user.country_code || 'BOL',
+        transcripcion: transcription,
       resultado: expenseData || {},
       wa_message_id: wa_message_id,
-      mensaje_origen: 'whatsapp'
+      mensaje_origen: 'whatsapp',
+      original_timestamp: now
     });
     console.log('✅ Prediction saved (cached? %s): %s', cached, prediction?.id);
 
-    // 6. Crear transacción en tabla transacciones (solo si no es caché)
-    // Si expenseData es null, usar valores por defecto
-    const { data: transaction } = cached 
-      ? { data: null } as any 
-      : await supabase
-          .from('transacciones')
-          .insert({
-            usuario_id: user.id,
-            tipo: 'gasto',
-            monto: expenseData?.monto || 0,
-            categoria: expenseData?.categoria || 'otros',
-            descripcion: expenseData?.descripcion || transcription,
-            fecha: new Date(timestamp).toISOString(),
-          })
-          .select()
-          .single();
+    // 6. Verificar configuración de confirmación por país
+    const { data: config } = await supabase
+      .from('feedback_confirmation_config')
+      .select('require_confirmation')
+      .eq('country_code', user.country_code || 'BOL')
+      .single();
 
-    console.log('✅ Transaction created:', transaction?.id);
+    const requireConfirmation = config?.require_confirmation ?? true;
+
+    // 7. Crear confirmación pendiente (solo si NO es caché y requiere confirmación)
+    if (requireConfirmation && !cached) {
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+
+      await supabase
+        .from('pending_confirmations')
+        .insert({
+          prediction_id: prediction.id,
+          usuario_id: user.id,
+          country_code: user.country_code || 'BOL',
+          wa_message_id: wa_message_id || null,
+          expires_at: expiresAt.toISOString()
+        });
+
+      console.log('⏳ Confirmación pendiente creada (30 min)');
+    }
+
+    // 8. Construir mensaje preview (NO crear transacción aún)
+    const processedType = type === 'audio' ? 'Audio' : 'Texto';
+    const previewMessage = `✅ ${processedType} procesado:
+
+*Monto (${expenseData?.moneda || 'Bs'}):* ${expenseData?.monto || 0}
+
+*Tipo de transacción:* ${expenseData?.tipo || 'gasto'}
+
+*Método de Pago:* ${expenseData?.metodoPago || 'efectivo'}
+
+*Categoría:* ${expenseData?.categoria || 'otros'}
+
+*Descripción:* ${expenseData?.descripcion || transcription.substring(0, 50)}
+
+*¿Está bien?*
+
+✅ *Responde:* sí / ok / perfecto / está bien
+
+⏰ Sin confirmación se guarda automáticamente en 30 minutos
+
+📱 (Tienes 48h para editarla en la app)`;
 
     return NextResponse.json({
       success: true,
       cached,
-      transaction_id: transaction?.id || prediction?.id,
-      transcription, // Para audio: transcripción, para texto: el texto original
+      prediction_id: prediction?.id,
+      transaction_id: prediction?.id, // Para compatibilidad con Worker
+      transcription,
       expense_data: expenseData,
       amount: expenseData?.monto || 0,
       currency: expenseData?.moneda || 'BOB',
       category: expenseData?.categoria || 'otros',
       processing_time_ms: Date.now() - startTime,
-      message_type: type, // Indicar si fue audio o texto
+      message_type: type,
+      preview_message: previewMessage
     });
 
   } catch (error: any) {

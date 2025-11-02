@@ -43,6 +43,7 @@ export async function insertPredictionWithDedup(payload: {
   resultado: Record<string, any>;
   wa_message_id?: string;
   mensaje_origen?: string;
+  original_timestamp?: string;
 }) {
   // 1. Si tiene wa_message_id, verificar si ya existe
   if (payload.wa_message_id) {
@@ -69,7 +70,8 @@ export async function insertPredictionWithDedup(payload: {
       resultado: payload.resultado,
       wa_message_id: payload.wa_message_id || null,
       mensaje_origen: payload.mensaje_origen || 'app',
-      categoria_detectada: categoria
+      categoria_detectada: categoria,
+      original_timestamp: payload.original_timestamp || new Date().toISOString()
     })
     .select()
     .single();
