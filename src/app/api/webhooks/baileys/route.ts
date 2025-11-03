@@ -3,11 +3,33 @@ import { groqWhisperService } from '@/services/groqWhisperService';
 import { groqService } from '@/services/groqService';
 import { createClient } from '@supabase/supabase-js';
 import { insertPredictionWithDedup, checkDuplicateWhatsAppMessage } from '@/lib/whatsapp-deduplication-endpoint';
+import type { GroqTransaction, GroqMultipleResponse } from '@/services/groqService';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// Función para construir preview de múltiples transacciones
+function construirPreviewMultiple(transactions: GroqTransaction[], processedType: string): string {
+  let preview = `✅ *${transactions.length} ${processedType.toUpperCase()}S PROCESADOS*\n\n`;
+  
+  transactions.forEach((tx, i) => {
+    const emoji = tx.tipo === 'ingreso' ? '📈' : '📉';
+    const signo = tx.tipo === 'ingreso' ? '+' : '';
+    preview += `${i+1}️⃣ ${emoji} *${signo}${tx.monto} ${tx.moneda || 'Bs'}* (${tx.categoria})\n`;
+    preview += `   ${tx.descripcion}\n`;
+    preview += `   💳 ${tx.metodoPago}\n\n`;
+  });
+  
+  preview += `⚠️ Tienes ${transactions.length} transacciones pendientes\n\n`;
+  preview += `*¿Están bien estas ${transactions.length}?*\n`;
+  preview += `✅ *Responde:* sí / ok / perfecto / está bien\n`;
+  preview += `⏰ Sin confirmación se guardan automáticamente en 30 minutos\n`;
+  preview += `📱 (Puedes editarlas en 48h en la app)`;
+  
+  return preview;
+}
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -130,27 +152,17 @@ export async function POST(req: NextRequest) {
       console.log('✅ Using text as transcription:', transcription);
     }
 
-    // 4. Extraer datos con Groq LLM con contexto por país
-    const expenseData = await groqService.extractExpenseWithCountryContext(
+    // 4. Extraer datos con Groq LLM - MÚLTIPLES TRANSACCIONES
+    const groqResult: GroqMultipleResponse | null = await groqService.processTranscriptionMultiple(
       transcription,
       user.country_code || 'BOL'
     );
-    console.log('✅ Expense extracted:', expenseData);
-
-    // 5. Guardar predicción con deduplicación Y timestamp original
-    const now = new Date().toISOString();
-    const { cached, data: prediction } = await insertPredictionWithDedup({
-        usuario_id: user.id,
-        country_code: user.country_code || 'BOL',
-        transcripcion: transcription,
-      resultado: expenseData || {},
-      wa_message_id: wa_message_id,
-      mensaje_origen: 'whatsapp',
-      original_timestamp: now
-    });
-    console.log('✅ Prediction saved (cached? %s): %s', cached, prediction?.id);
-
-    // 6. Verificar configuración de confirmación por país
+    
+    console.log('✅ Groq multiple result:', groqResult);
+    console.log('🔍 DEBUG: groqResult?.esMultiple:', groqResult?.esMultiple);
+    console.log('🔍 DEBUG: groqResult?.transacciones?.length:', groqResult?.transacciones?.length);
+    
+    // 5. Verificar configuración de confirmación por país
     const { data: config } = await supabase
       .from('feedback_confirmation_config')
       .select('require_confirmation')
@@ -158,60 +170,115 @@ export async function POST(req: NextRequest) {
       .single();
 
     const requireConfirmation = config?.require_confirmation ?? true;
-
-    // 7. Crear confirmación pendiente (solo si NO es caché y requiere confirmación)
-    if (requireConfirmation && !cached) {
-      const expiresAt = new Date();
-      expiresAt.setMinutes(expiresAt.getMinutes() + 30);
-
-      await supabase
-        .from('pending_confirmations')
-        .insert({
+    
+    // 6. Procesar según si es múltiple o simple
+    const now = new Date().toISOString();
+    let cached = false;
+    let prediction: any = null;
+    let expenseData: any = null;
+    let pendingCount = 0;
+    
+    if (groqResult?.esMultiple && groqResult.transacciones.length > 1) {
+      console.log(`✅ MÚLTIPLES transacciones detectadas: ${groqResult.transacciones.length}`);
+      
+      // Crear una predicción por cada transacción
+      const predictions: any[] = [];
+      for (let i = 0; i < groqResult.transacciones.length; i++) {
+        const tx = groqResult.transacciones[i];
+        const { data: pred } = await insertPredictionWithDedup({
+          usuario_id: user.id,
+          country_code: user.country_code || 'BOL',
+          transcripcion: `${transcription} [TX ${i+1}/${groqResult.transacciones.length}]`,
+          resultado: tx,
+          wa_message_id: `${wa_message_id}_${i}`,
+          mensaje_origen: 'whatsapp',
+          original_timestamp: now
+        });
+        predictions.push(pred);
+      }
+      
+      prediction = predictions[0]; // Usar primera para compatibilidad
+      expenseData = groqResult.transacciones[0]; // Primera transacción
+      
+      // Crear confirmaciones pendientes para todas
+      if (requireConfirmation) {
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+        
+        for (let i = 0; i < predictions.length; i++) {
+          await supabase.from('pending_confirmations').insert({
+            prediction_id: predictions[i].id,
+            usuario_id: user.id,
+            country_code: user.country_code || 'BOL',
+            wa_message_id: `${wa_message_id}_${i}`,
+            parent_message_id: wa_message_id, // KEY: Agrupar todas
+            expires_at: expiresAt.toISOString()
+          });
+        }
+        
+        console.log(`⏳ ${predictions.length} confirmaciones pendientes creadas (30 min)`);
+        pendingCount = predictions.length;
+      }
+    } else {
+      // Comportamiento SIMPLE (1 transacción) - compatibilidad
+      console.log('⚠️ Modo SIMPLE activado');
+      console.log('🔍 DEBUG: groqResult es null?', groqResult === null);
+      console.log('🔍 DEBUG: esMultiple?', groqResult?.esMultiple);
+      console.log('🔍 DEBUG: transacciones length?', groqResult?.transacciones?.length);
+      expenseData = groqResult?.transacciones[0];
+      const { cached: isCached, data: pred } = await insertPredictionWithDedup({
+        usuario_id: user.id,
+        country_code: user.country_code || 'BOL',
+        transcripcion: transcription,
+        resultado: expenseData || {},
+        wa_message_id: wa_message_id,
+        mensaje_origen: 'whatsapp',
+        original_timestamp: now
+      });
+      
+      cached = isCached;
+      prediction = pred;
+      
+      if (requireConfirmation && !cached) {
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+        
+        await supabase.from('pending_confirmations').insert({
           prediction_id: prediction.id,
           usuario_id: user.id,
           country_code: user.country_code || 'BOL',
           wa_message_id: wa_message_id || null,
           expires_at: expiresAt.toISOString()
         });
-
-      console.log('⏳ Confirmación pendiente creada (30 min)');
-    }
-
-    // 8. Verificar si hay múltiples transacciones pendientes
-    let pendingCount = 0;
-    if (requireConfirmation && !cached) {
-      const { count } = await supabase
-        .from('pending_confirmations')
-        .select('*', { count: 'exact', head: true })
-        .eq('usuario_id', user.id)
-        .is('confirmed', null);
-      
-      pendingCount = count || 0;
-      console.log(`📊 Transacciones pendientes: ${pendingCount}`);
-      
-      // METRIC: Monitoreo de múltiples pendientes
-      if (pendingCount >= 4) {
-        console.warn(`⚠️ [METRIC] Usuario ${user.id} tiene ${pendingCount} transacciones pendientes (>3 threshold)`);
+        
+        console.log('⏳ Confirmación pendiente creada (30 min)');
+        pendingCount = 1;
       }
     }
-
-    // 9. Construir mensaje preview (NO crear transacción aún)
-    const processedType = type === 'audio' ? 'Audio' : 'Texto';
-    const pendingWarning = pendingCount > 1 
-      ? `\n*⚠️ Tienes ${pendingCount} transacciones pendientes de confirmar*`
-      : '';
     
-    const previewMessage = `✅ *${processedType.toUpperCase()} PROCESADO*${pendingWarning}
+    // 7. Construir preview según tipo
+    const processedType = type === 'audio' ? 'Audio' : 'Texto';
+    let previewMessage: string;
+    
+    if (groqResult?.esMultiple && groqResult.transacciones.length > 1) {
+      // Preview MÚLTIPLE consolidado
+      previewMessage = construirPreviewMultiple(groqResult.transacciones, processedType);
+    } else {
+      // Preview SIMPLE (comportamiento actual)
+      previewMessage = `✅ *${processedType.toUpperCase()} PROCESADO*
 *Monto (${expenseData?.moneda || 'Bs'}):* ${expenseData?.monto || 0}
 *Tipo de transacción:* ${expenseData?.tipo || 'gasto'}
 *Método de Pago:* ${expenseData?.metodoPago || 'efectivo'}
 *Categoría:* ${expenseData?.categoria || 'otros'}
 *Descripción:* ${expenseData?.descripcion || transcription.substring(0, 50)}
 
-*¿Está bien esta última?*
+*¿Está bien?*
 ✅ *Responde:* sí / ok / perfecto / está bien
 ⏰ Sin confirmación se guarda automáticamente en 30 minutos
 📱 (Tienes 48h para editarla en la app)`;
+    }
+
+    console.log('📤 Preview message generado');
 
     return NextResponse.json({
       success: true,

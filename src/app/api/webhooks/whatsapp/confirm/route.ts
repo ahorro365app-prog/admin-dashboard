@@ -61,13 +61,14 @@ export async function POST(request: NextRequest) {
     // OBTENER PREDICCIÓN (usar prediction_id si viene, sino la más reciente)
     // ============================================================
     let prediction_id_to_use = prediction_id;
+    let parent_message_id: string | null = null;
     
     // Si no viene prediction_id, obtener la transacción pendiente más reciente
     if (!prediction_id_to_use) {
       console.log('🔍 No hay prediction_id, buscando transacción pendiente más reciente...');
       const { data: pendingConf } = await supabase
         .from('pending_confirmations')
-        .select('prediction_id')
+        .select('prediction_id, parent_message_id')
         .eq('usuario_id', usuario_id)
         .is('confirmed', null)
         .order('created_at', { ascending: false })
@@ -82,7 +83,12 @@ export async function POST(request: NextRequest) {
       }
 
       prediction_id_to_use = pendingConf.prediction_id;
+      parent_message_id = pendingConf.parent_message_id;
       console.log(`✅ Transacción pendiente encontrada: ${prediction_id_to_use}`);
+      
+      if (parent_message_id) {
+        console.log(`✅ Parent message ID detectado: ${parent_message_id} (múltiples TX)`);
+      }
     }
 
     const { data: prediction } = await supabase
@@ -99,67 +105,100 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
-    // ACTUALIZAR PREDICCIÓN
+    // CONFIRMAR (SIMPLE o MÚLTIPLE)
     // ============================================================
-    await supabase
-      .from('predicciones_groq')
-      .update({
-        confirmado: true,
-        confirmado_por: 'whatsapp_reaction',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', prediction_id_to_use);
-
-    console.log('✅ Predicción actualizada (MANUAL)');
-
-    // ============================================================
-    // GUARDAR FEEDBACK (weight=1.0)
-    // ============================================================
-    await supabase
-      .from('feedback_usuarios')
-      .insert({
-        prediction_id: prediction_id_to_use,
-        usuario_id,
-        era_correcto: true,
-        country_code,
-        origen: 'whatsapp_reaction',
-        confiabilidad: 1.0
-      });
-
-    console.log('✅ Feedback guardado (weight=1.0)');
-
-    // ============================================================
-    // CREAR TRANSACCIÓN CON TIMESTAMP ORIGINAL
-    // ============================================================
-    if (prediction?.resultado) {
-      await supabase
-        .from('transacciones')
-        .insert({
-          usuario_id,
-          tipo: prediction.resultado?.tipo || 'gasto',
-          monto: prediction.resultado?.monto,
-          categoria: prediction.resultado?.categoria,
-          descripcion: prediction.resultado?.descripcion,
-          fecha: prediction.original_timestamp, // ← TIMESTAMP ORIGINAL
-          metodo_pago: prediction.resultado?.metodoPago,
-          moneda: prediction.resultado?.moneda || 'BOB'
-        });
-
-      console.log('✅ Transacción creada con timestamp original:', prediction.original_timestamp);
+    let predictionsToConfirm: any[] = [];
+    
+    if (parent_message_id) {
+      // MODO MÚLTIPLE: Confirmar todas las predicciones del mismo parent_message_id
+      console.log(`📦 MODO MÚLTIPLE: Confirmando grupo ${parent_message_id}`);
+      
+      const { data: allGroupPendings } = await supabase
+        .from('pending_confirmations')
+        .select('prediction_id')
+        .eq('usuario_id', usuario_id)
+        .eq('parent_message_id', parent_message_id)
+        .is('confirmed', null);
+      
+      if (!allGroupPendings || allGroupPendings.length === 0) {
+        return NextResponse.json({
+          success: false,
+          message: 'No se encontraron transacciones del grupo para confirmar'
+        }, { status: 404 });
+      }
+      
+      // Obtener todas las predicciones del grupo
+      const predictionIds = allGroupPendings.map(p => p.prediction_id);
+      const { data: groupPredictions } = await supabase
+        .from('predicciones_groq')
+        .select('*')
+        .in('id', predictionIds);
+      
+      predictionsToConfirm = groupPredictions || [];
+      console.log(`✅ Grupo detectado: ${predictionsToConfirm.length} transacciones`);
+    } else {
+      // MODO SIMPLE: Confirmar solo una
+      console.log('📝 MODO SIMPLE: Confirmando 1 transacción');
+      predictionsToConfirm = [prediction];
     }
-
-    // ============================================================
-    // MARCAR CONFIRMACIÓN COMO COMPLETADA
-    // ============================================================
-    await supabase
-      .from('pending_confirmations')
-      .update({
-        confirmed: true,
-        confirmed_at: new Date().toISOString()
-      })
-      .eq('prediction_id', prediction_id_to_use);
-
-    console.log('✅ Confirmación pendiente marcada');
+    
+    // Procesar cada predicción
+    for (const pred of predictionsToConfirm) {
+      // Actualizar predicción
+      await supabase
+        .from('predicciones_groq')
+        .update({
+          confirmado: true,
+          confirmado_por: 'whatsapp_reaction',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', pred.id);
+      
+      console.log(`✅ Predicción ${pred.id} actualizada (MANUAL)`);
+      
+      // Guardar feedback
+      await supabase
+        .from('feedback_usuarios')
+        .insert({
+          prediction_id: pred.id,
+          usuario_id,
+          era_correcto: true,
+          country_code,
+          origen: 'whatsapp_reaction',
+          confiabilidad: 1.0
+        });
+      
+      // Crear transacción
+      if (pred?.resultado) {
+        await supabase
+          .from('transacciones')
+          .insert({
+            usuario_id,
+            tipo: pred.resultado?.tipo || 'gasto',
+            monto: pred.resultado?.monto,
+            categoria: pred.resultado?.categoria,
+            descripcion: pred.resultado?.descripcion,
+            fecha: pred.original_timestamp,
+            metodo_pago: pred.resultado?.metodoPago,
+            moneda: pred.resultado?.moneda || 'BOB'
+          });
+        
+        console.log(`✅ Transacción ${pred.id} creada con timestamp original`);
+      }
+      
+      // Marcar confirmación
+      await supabase
+        .from('pending_confirmations')
+        .update({
+          confirmed: true,
+          confirmed_at: new Date().toISOString()
+        })
+        .eq('prediction_id', pred.id);
+      
+      console.log(`✅ Confirmación pendiente ${pred.id} marcada`);
+    }
+    
+    console.log(`✅ Total confirmadas: ${predictionsToConfirm.length}`);
 
     // ============================================================
     // RECALCULAR ACCURACY PONDERADA
@@ -195,7 +234,9 @@ export async function POST(request: NextRequest) {
       console.log(`🚀 ${country_code} CAMBIADO A AUTOMÁTICO`);
       return NextResponse.json({
         success: true,
-        message: '✅ Perfecto. Transacción guardada.',
+        message: predictionsToConfirm.length > 1 
+          ? `✅ Perfecto. ${predictionsToConfirm.length} transacciones guardadas.` 
+          : '✅ Perfecto. Transacción guardada.',
         confirmado: true,
         auto_enabled: true,
         accuracy: accuracy
@@ -204,7 +245,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '✅ Perfecto. Transacción guardada.',
+      message: predictionsToConfirm.length > 1 
+        ? `✅ Perfecto. ${predictionsToConfirm.length} transacciones guardadas.` 
+        : '✅ Perfecto. Transacción guardada.',
       confirmado: true,
       accuracy: accuracy
     });
