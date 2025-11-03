@@ -196,7 +196,8 @@ export async function POST(req: NextRequest) {
           resultado: tx,
           wa_message_id: `${wa_message_id}_${i}`,
           mensaje_origen: 'whatsapp',
-          original_timestamp: now
+          original_timestamp: now,
+          parent_message_id: wa_message_id
         });
         predictions.push(pred);
       }
