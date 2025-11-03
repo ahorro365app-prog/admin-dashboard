@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
     // Procesar cada predicción
     for (const pred of predictionsToConfirm) {
       // Actualizar predicción
-      await supabase
+      const { error: updatePredError } = await supabase
         .from('predicciones_groq')
         .update({
           confirmado: true,
@@ -176,10 +176,14 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', pred.id);
       
-      console.log(`✅ Predicción ${pred.id} actualizada (MANUAL)`);
+      if (updatePredError) {
+        console.error(`❌ Error actualizando predicción ${pred.id}:`, updatePredError);
+      } else {
+        console.log(`✅ Predicción ${pred.id} actualizada (MANUAL)`);
+      }
       
       // Guardar feedback
-      await supabase
+      const { error: feedbackError } = await supabase
         .from('feedback_usuarios')
         .insert({
           prediction_id: pred.id,
@@ -189,6 +193,10 @@ export async function POST(request: NextRequest) {
           origen: 'whatsapp_reaction',
           confiabilidad: 1.0
         });
+      
+      if (feedbackError) {
+        console.error(`❌ Error guardando feedback ${pred.id}:`, feedbackError);
+      }
       
       // Crear transacción
       if (pred?.resultado) {
@@ -213,7 +221,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Marcar confirmación
-      await supabase
+      const { error: confirmError } = await supabase
         .from('pending_confirmations')
         .update({
           confirmed: true,
@@ -221,7 +229,11 @@ export async function POST(request: NextRequest) {
         })
         .eq('prediction_id', pred.id);
       
-      console.log(`✅ Confirmación pendiente ${pred.id} marcada`);
+      if (confirmError) {
+        console.error(`❌ Error marcando confirmación ${pred.id}:`, confirmError);
+      } else {
+        console.log(`✅ Confirmación pendiente ${pred.id} marcada`);
+      }
     }
     
     console.log(`✅ Total confirmadas: ${predictionsToConfirm.length}`);
