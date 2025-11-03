@@ -33,3 +33,5 @@ COMMENT ON TABLE feedback_confirmation_config IS 'Configuración de confirmacion
 COMMENT ON COLUMN feedback_confirmation_config.require_confirmation IS 'Si requiere confirmación manual o es automático';
 COMMENT ON COLUMN feedback_confirmation_config.confirmation_timeout_minutes IS 'Tiempo de espera antes de auto-confirmar';
 
+
+

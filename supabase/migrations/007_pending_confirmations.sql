@@ -27,3 +27,5 @@ COMMENT ON TABLE pending_confirmations IS 'Transacciones pendientes de confirmac
 COMMENT ON COLUMN pending_confirmations.expires_at IS 'Cuándo se auto-confirma si no hay respuesta';
 COMMENT ON COLUMN pending_confirmations.confirmed IS 'NULL=pending, true=confirmed, false=cancelled';
 
+
+

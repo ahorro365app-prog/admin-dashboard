@@ -23,3 +23,5 @@ ON feedback_usuarios(origen, confiabilidad, country_code, created_at DESC);
 COMMENT ON COLUMN feedback_usuarios.origen IS 'Origen: whatsapp_reaction (1.0), app_edit (2.0), manual (1.5)';
 COMMENT ON COLUMN feedback_usuarios.confiabilidad IS 'Peso para accuracy ponderado: 1.0=normal, 2.0=máximo (edición app)';
 
+
+

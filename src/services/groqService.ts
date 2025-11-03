@@ -20,11 +20,8 @@ async function processTextWithGroq(text: string, userCountryCode: string = 'BO')
   if (!text || !text.trim()) return null;
   if (!GROQ_API_KEY) {
     console.warn('⚠️ GROQ_API_KEY no configurada. Saltando procesamiento Groq.');
-    console.warn('🔍 DEBUG: GROQ_API_KEY env var:', process.env.GROQ_API_KEY ? 'Set (hidden)' : 'Not set');
-    console.warn('🔍 DEBUG: NEXT_PUBLIC_GROQ_API_KEY env var:', process.env.NEXT_PUBLIC_GROQ_API_KEY ? 'Set (hidden)' : 'Not set');
     return null;
   }
-  console.log('✅ Groq API Key encontrada, procesando con Groq LLM...');
 
   try {
     const systemPrompt = `Eres un asistente experto en finanzas personales que extrae información de transacciones.

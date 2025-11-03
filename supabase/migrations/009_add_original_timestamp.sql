@@ -7,3 +7,5 @@ ON predicciones_groq(original_timestamp DESC);
 
 COMMENT ON COLUMN predicciones_groq.original_timestamp IS 'Hora exacta cuando usuario envió la transacción (no cambia)';
 
+
+
