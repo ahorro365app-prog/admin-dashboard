@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', prediction_id_to_use);
 
-    console.log('✅ Predicción actualizada');
+    console.log('✅ Predicción actualizada (MANUAL)');
 
     // ============================================================
     // GUARDAR FEEDBACK (weight=1.0)

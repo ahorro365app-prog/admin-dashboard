@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
           })
           .eq('id', exp.id);
 
-        console.log(`✅ Auto-guardada (timeout): ${exp.prediction_id}`);
+        console.log(`✅ Auto-guardada (TIMEOUT 30min): ${exp.prediction_id}`);
         processed++;
 
       } catch (err) {

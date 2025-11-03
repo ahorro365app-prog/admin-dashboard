@@ -188,6 +188,11 @@ export async function POST(req: NextRequest) {
       
       pendingCount = count || 0;
       console.log(`📊 Transacciones pendientes: ${pendingCount}`);
+      
+      // METRIC: Monitoreo de múltiples pendientes
+      if (pendingCount >= 4) {
+        console.warn(`⚠️ [METRIC] Usuario ${user.id} tiene ${pendingCount} transacciones pendientes (>3 threshold)`);
+      }
     }
 
     // 9. Construir mensaje preview (NO crear transacción aún)

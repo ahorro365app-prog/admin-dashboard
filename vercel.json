@@ -8,6 +8,10 @@
     {
       "path": "/api/admin/cleanup",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/confirm-expired",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
