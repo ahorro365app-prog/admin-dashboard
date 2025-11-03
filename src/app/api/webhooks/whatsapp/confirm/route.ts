@@ -58,12 +58,37 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
-    // OBTENER PREDICCIÓN
+    // OBTENER PREDICCIÓN (usar prediction_id si viene, sino la más reciente)
     // ============================================================
+    let prediction_id_to_use = prediction_id;
+    
+    // Si no viene prediction_id, obtener la transacción pendiente más reciente
+    if (!prediction_id_to_use) {
+      console.log('🔍 No hay prediction_id, buscando transacción pendiente más reciente...');
+      const { data: pendingConf } = await supabase
+        .from('pending_confirmations')
+        .select('prediction_id')
+        .eq('usuario_id', usuario_id)
+        .is('confirmed', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!pendingConf) {
+        return NextResponse.json({
+          success: false,
+          message: '❌ No hay ninguna transacción pendiente para confirmar'
+        }, { status: 404 });
+      }
+
+      prediction_id_to_use = pendingConf.prediction_id;
+      console.log(`✅ Transacción pendiente encontrada: ${prediction_id_to_use}`);
+    }
+
     const { data: prediction } = await supabase
       .from('predicciones_groq')
-      .select('resultado, original_timestamp')
-      .eq('id', prediction_id)
+      .select('resultado, original_timestamp, id')
+      .eq('id', prediction_id_to_use)
       .single();
 
     if (!prediction) {
@@ -83,7 +108,7 @@ export async function POST(request: NextRequest) {
         confirmado_por: 'whatsapp_reaction',
         updated_at: new Date().toISOString()
       })
-      .eq('id', prediction_id);
+      .eq('id', prediction_id_to_use);
 
     console.log('✅ Predicción actualizada');
 
@@ -93,7 +118,7 @@ export async function POST(request: NextRequest) {
     await supabase
       .from('feedback_usuarios')
       .insert({
-        prediction_id,
+        prediction_id: prediction_id_to_use,
         usuario_id,
         era_correcto: true,
         country_code,
@@ -132,7 +157,7 @@ export async function POST(request: NextRequest) {
         confirmed: true,
         confirmed_at: new Date().toISOString()
       })
-      .eq('prediction_id', prediction_id);
+      .eq('prediction_id', prediction_id_to_use);
 
     console.log('✅ Confirmación pendiente marcada');
 
