@@ -22,14 +22,20 @@ export async function POST(request: NextRequest) {
     const { prediction_id, phone_number, message } = body;
 
     console.log(`📝 Confirmación recibida: "${message}"`);
+    console.log(`📱 phone_number recibido del body:`, phone_number);
 
     // ============================================================
     // OBTENER USUARIO Y PAÍS
     // ============================================================
     const phoneNumber = phone_number?.replace('@s.whatsapp.net', '') || phone_number;
+    console.log(`📱 phoneNumber después de limpiar:`, phoneNumber);
+    
     // Intentar buscar con ambos formatos (con y sin +)
     const phoneWithPlus = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
     const phoneWithoutPlus = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
+    
+    console.log(`🔍 Buscando usuario con phoneWithPlus:`, phoneWithPlus);
+    console.log(`🔍 Buscando usuario con phoneWithoutPlus:`, phoneWithoutPlus);
     
     // Intentar buscar primero con el formato con +
     let { data: user, error: userError } = await supabase
@@ -41,17 +47,21 @@ export async function POST(request: NextRequest) {
     // Si no se encontró con +, intentar sin +
     if (userError || !user) {
       console.log('⚠️ No encontrado con formato +, intentando sin +...');
+      console.log('⚠️ Error con formato +:', userError);
       const { data: user2, error: userError2 } = await supabase
         .from('usuarios')
         .select('id, country_code')
         .eq('telefono', phoneWithoutPlus)
         .single();
       
+      console.log('🔍 Resultado búsqueda sin +:', { user2, userError2 });
       user = user2;
       userError = userError2;
     }
 
     if (!user) {
+      console.error('❌ Usuario no encontrado con ningún formato');
+      console.error('❌ userError:', userError);
       return NextResponse.json({
         success: false,
         error: 'user not found'
@@ -61,7 +71,8 @@ export async function POST(request: NextRequest) {
     const usuario_id = user.id;
     const country_code = user.country_code || 'BOL';
 
-    console.log(`✅ Usuario: ${usuario_id}, País: ${country_code}`);
+    console.log(`✅ Usuario encontrado: ${usuario_id}, País: ${country_code}`);
+    console.log(`🔍 Ahora buscando transacciones pendientes para usuario_id: ${usuario_id}`);
 
     // ============================================================
     // PARSEAR CONFIRMACIÓN
@@ -90,6 +101,8 @@ export async function POST(request: NextRequest) {
     // Si no viene prediction_id, obtener la transacción pendiente más reciente
     if (!prediction_id_to_use) {
       console.log('🔍 No hay prediction_id, buscando transacción pendiente más reciente...');
+      console.log('🔍 Query params:', { usuario_id, confirmed: null });
+      
       const { data: pendingConf, error: pendingError } = await supabase
         .from('pending_confirmations')
         .select('prediction_id, parent_message_id')
@@ -100,9 +113,35 @@ export async function POST(request: NextRequest) {
         .single();
 
       console.log('🔍 Resultado query pending_confirmations:', { pendingConf, pendingError });
+      
+      // Si hay error, mostrar más detalles
+      if (pendingError) {
+        console.error('❌ Error en query pending_confirmations:', pendingError);
+        console.error('❌ Error code:', (pendingError as any).code);
+        console.error('❌ Error message:', (pendingError as any).message);
+        console.error('❌ Error details:', (pendingError as any).details);
+      }
 
       if (!pendingConf) {
         console.log('❌ No se encontró transacción pendiente');
+        
+        // DEBUG: Verificar cuántas transacciones pendientes hay en total para este usuario
+        const { data: allPending, error: allPendingError } = await supabase
+          .from('pending_confirmations')
+          .select('id, prediction_id, parent_message_id, confirmed, created_at')
+          .eq('usuario_id', usuario_id);
+        
+        console.log('🔍 DEBUG: Todas las pending_confirmations para este usuario:', {
+          total: allPending?.length || 0,
+          pendientes: allPending?.filter(p => p.confirmed === null).length || 0,
+          confirmadas: allPending?.filter(p => p.confirmed === true).length || 0,
+          datos: allPending
+        });
+        
+        if (allPendingError) {
+          console.error('❌ Error obteniendo todas las pending_confirmations:', allPendingError);
+        }
+        
         return NextResponse.json({
           success: false,
           message: '❌ No hay ninguna transacción pendiente para confirmar'
