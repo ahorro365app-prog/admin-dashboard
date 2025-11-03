@@ -179,25 +179,7 @@ export async function POST(req: NextRequest) {
 
     // 8. Construir mensaje preview (NO crear transacción aún)
     const processedType = type === 'audio' ? 'Audio' : 'Texto';
-    const previewMessage = `✅ ${processedType} procesado:
-
-*Monto (${expenseData?.moneda || 'Bs'}):* ${expenseData?.monto || 0}
-
-*Tipo de transacción:* ${expenseData?.tipo || 'gasto'}
-
-*Método de Pago:* ${expenseData?.metodoPago || 'efectivo'}
-
-*Categoría:* ${expenseData?.categoria || 'otros'}
-
-*Descripción:* ${expenseData?.descripcion || transcription.substring(0, 50)}
-
-*¿Está bien?*
-
-✅ *Responde:* sí / ok / perfecto / está bien
-
-⏰ Sin confirmación se guarda automáticamente en 30 minutos
-
-📱 (Tienes 48h para editarla en la app)`;
+    const previewMessage = `✅ ${processedType} procesado:\n\n*Monto (${expenseData?.moneda || 'Bs'}):* ${expenseData?.monto || 0}\n\n*Tipo de transacción:* ${expenseData?.tipo || 'gasto'}\n\n*Método de Pago:* ${expenseData?.metodoPago || 'efectivo'}\n\n*Categoría:* ${expenseData?.categoria || 'otros'}\n\n*Descripción:* ${expenseData?.descripcion || transcription.substring(0, 50)}\n\n*¿Está bien?*\n\n✅ *Responde:* sí / ok / perfecto / está bien\n\n⏰ Sin confirmación se guarda automáticamente en 30 minutos\n\n📱 (Tienes 48h para editarla en la app)`;
 
     return NextResponse.json({
       success: true,
