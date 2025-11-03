@@ -74,10 +74,14 @@ export async function POST(req: NextRequest) {
     console.log(`📱 WhatsApp ${type} from:`, phoneNumber);
 
     // 1. VERIFICAR SI EL USUARIO ESTÁ REGISTRADO (ANTES de procesar con Groq)
+    // Intentar buscar con ambos formatos (con y sin +)
+    const phoneWithPlus = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+    const phoneWithoutPlus = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
+    
     let { data: user, error: userError } = await supabase
       .from('usuarios')
       .select('*')
-      .eq('telefono', phoneNumber)
+      .or(`telefono.eq.${phoneWithPlus},telefono.eq.${phoneWithoutPlus}`)
       .single();
 
     if (userError || !user) {

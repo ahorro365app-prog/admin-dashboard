@@ -27,10 +27,14 @@ export async function POST(request: NextRequest) {
     // OBTENER USUARIO Y PAÍS
     // ============================================================
     const phoneNumber = phone_number?.replace('@s.whatsapp.net', '') || phone_number;
+    // Intentar buscar con ambos formatos (con y sin +)
+    const phoneWithPlus = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+    const phoneWithoutPlus = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
+    
     const { data: user } = await supabase
       .from('usuarios')
       .select('id, country_code')
-      .eq('telefono', phoneNumber)
+      .or(`telefono.eq.${phoneWithPlus},telefono.eq.${phoneWithoutPlus}`)
       .single();
 
     if (!user) {
