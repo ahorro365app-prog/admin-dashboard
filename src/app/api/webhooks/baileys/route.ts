@@ -185,6 +185,7 @@ export async function POST(req: NextRequest) {
 *Método de Pago:* ${expenseData?.metodoPago || 'efectivo'}
 *Categoría:* ${expenseData?.categoria || 'otros'}
 *Descripción:* ${expenseData?.descripcion || transcription.substring(0, 50)}
+
 *¿Está bien?*
 ✅ *Responde:* sí / ok / perfecto / está bien
 ⏰ Sin confirmación se guarda automáticamente en 30 minutos
