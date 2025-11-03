@@ -114,8 +114,11 @@ export async function POST(request: NextRequest) {
       console.log(`✅ Transacción pendiente encontrada: ${prediction_id_to_use}`);
       console.log(`🔍 parent_message_id obtenido: ${parent_message_id || 'null'}`);
       
+      // Si tenemos parent_message_id, usar ese directamente para buscar todas las del grupo
+      // No necesitamos usar prediction_id_to_use si es múltiple
       if (parent_message_id) {
         console.log(`✅ Parent message ID detectado: ${parent_message_id} (múltiples TX)`);
+        console.log(`🔄 Buscando todas las transacciones pendientes del grupo ${parent_message_id}...`);
       }
     }
 
@@ -133,9 +136,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Si no obtuvimos parent_message_id en el paso anterior, intentar obtenerlo de la predicción
-    if (!parent_message_id && prediction.parent_message_id) {
-      parent_message_id = prediction.parent_message_id;
-      console.log(`🔍 parent_message_id obtenido de la predicción: ${parent_message_id}`);
+    // O si el prediction_id fue proporcionado directamente, también obtener el parent_message_id
+    if (!parent_message_id) {
+      if (prediction.parent_message_id) {
+        parent_message_id = prediction.parent_message_id;
+        console.log(`🔍 parent_message_id obtenido de la predicción: ${parent_message_id}`);
+      } else {
+        // Si no tiene parent_message_id en la predicción, intentar obtenerlo de pending_confirmations
+        const { data: pendingConfForPred } = await supabase
+          .from('pending_confirmations')
+          .select('parent_message_id')
+          .eq('prediction_id', prediction_id_to_use)
+          .is('confirmed', null)
+          .single();
+        
+        if (pendingConfForPred?.parent_message_id) {
+          parent_message_id = pendingConfForPred.parent_message_id;
+          console.log(`🔍 parent_message_id obtenido de pending_confirmations: ${parent_message_id}`);
+        }
+      }
     }
 
     // ============================================================
@@ -146,30 +165,44 @@ export async function POST(request: NextRequest) {
     if (parent_message_id) {
       // MODO MÚLTIPLE: Confirmar todas las predicciones del mismo parent_message_id
       console.log(`📦 MODO MÚLTIPLE: Confirmando grupo ${parent_message_id}`);
+      console.log(`🔍 Buscando todas las pending_confirmations con parent_message_id: ${parent_message_id}`);
       
-      const { data: allGroupPendings } = await supabase
+      const { data: allGroupPendings, error: groupPendingsError } = await supabase
         .from('pending_confirmations')
-        .select('prediction_id')
+        .select('prediction_id, confirmed')
         .eq('usuario_id', usuario_id)
         .eq('parent_message_id', parent_message_id)
         .is('confirmed', null);
       
-      if (!allGroupPendings || allGroupPendings.length === 0) {
-        return NextResponse.json({
-          success: false,
-          message: 'No se encontraron transacciones del grupo para confirmar'
-        }, { status: 404 });
+      if (groupPendingsError) {
+        console.error(`❌ Error buscando grupo de pending_confirmations:`, groupPendingsError);
       }
       
-      // Obtener todas las predicciones del grupo
-      const predictionIds = allGroupPendings.map(p => p.prediction_id);
-      const { data: groupPredictions } = await supabase
-        .from('predicciones_groq')
-        .select('*')
-        .in('id', predictionIds);
+      console.log(`🔍 Found ${allGroupPendings?.length || 0} pending_confirmations pendientes del grupo`);
+      console.log(`🔍 Prediction IDs encontrados:`, allGroupPendings?.map(p => p.prediction_id) || []);
       
-      predictionsToConfirm = groupPredictions || [];
-      console.log(`✅ Grupo detectado: ${predictionsToConfirm.length} transacciones`);
+      if (!allGroupPendings || allGroupPendings.length === 0) {
+        console.log('⚠️ No se encontraron transacciones pendientes del grupo, intentando modo simple...');
+        // Si no hay pendientes del grupo, confirmar solo la que se encontró
+        predictionsToConfirm = [prediction];
+      } else {
+        // Obtener todas las predicciones del grupo
+        const predictionIds = allGroupPendings.map(p => p.prediction_id);
+        console.log(`🔍 Buscando predicciones con IDs:`, predictionIds);
+        
+        const { data: groupPredictions, error: groupPredictionsError } = await supabase
+          .from('predicciones_groq')
+          .select('*')
+          .in('id', predictionIds);
+        
+        if (groupPredictionsError) {
+          console.error(`❌ Error buscando predicciones del grupo:`, groupPredictionsError);
+        }
+        
+        predictionsToConfirm = groupPredictions || [];
+        console.log(`✅ Grupo detectado: ${predictionsToConfirm.length} transacciones a confirmar`);
+        console.log(`🔍 IDs de predicciones a confirmar:`, predictionsToConfirm.map(p => p.id));
+      }
     } else {
       // MODO SIMPLE: Confirmar solo una
       console.log('📝 MODO SIMPLE: Confirmando 1 transacción');
