@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
 
     // 8. Construir mensaje preview (NO crear transacción aún)
     const processedType = type === 'audio' ? 'Audio' : 'Texto';
-    const previewMessage = `✅ ${processedType} procesado:
+    const previewMessage = `✅ **${processedType} procesado**
 
 *Monto (${expenseData?.moneda || 'Bs'}):* ${expenseData?.monto || 0}
 *Tipo de transacción:* ${expenseData?.tipo || 'gasto'}
