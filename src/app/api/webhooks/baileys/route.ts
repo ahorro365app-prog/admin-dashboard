@@ -199,6 +199,8 @@ export async function POST(req: NextRequest) {
 
 📱 (Tienes 48h para editarla en la app)`;
 
+    console.log('📝 DEBUG: Enviando respuesta con preview_message:', previewMessage?.substring(0, 200));
+
     return NextResponse.json({
       success: true,
       cached,
