@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
       
       // Crear transacción
       if (pred?.resultado) {
-        await supabase
+        const { error: txError } = await supabase
           .from('transacciones')
           .insert({
             usuario_id,
@@ -187,7 +187,11 @@ export async function POST(request: NextRequest) {
             moneda: pred.resultado?.moneda || 'BOB'
           });
         
-        console.log(`✅ Transacción ${pred.id} creada con timestamp original`);
+        if (txError) {
+          console.error(`❌ Error creando transacción ${pred.id}:`, txError);
+        } else {
+          console.log(`✅ Transacción ${pred.id} creada con timestamp original`);
+        }
       }
       
       // Marcar confirmación
