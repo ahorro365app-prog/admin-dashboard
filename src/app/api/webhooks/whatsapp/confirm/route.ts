@@ -31,11 +31,25 @@ export async function POST(request: NextRequest) {
     const phoneWithPlus = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
     const phoneWithoutPlus = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
     
-    const { data: user } = await supabase
+    // Intentar buscar primero con el formato con +
+    let { data: user, error: userError } = await supabase
       .from('usuarios')
       .select('id, country_code')
-      .or(`telefono.eq.${phoneWithPlus},telefono.eq.${phoneWithoutPlus}`)
+      .eq('telefono', phoneWithPlus)
       .single();
+
+    // Si no se encontró con +, intentar sin +
+    if (userError || !user) {
+      console.log('⚠️ No encontrado con formato +, intentando sin +...');
+      const { data: user2, error: userError2 } = await supabase
+        .from('usuarios')
+        .select('id, country_code')
+        .eq('telefono', phoneWithoutPlus)
+        .single();
+      
+      user = user2;
+      userError = userError2;
+    }
 
     if (!user) {
       return NextResponse.json({

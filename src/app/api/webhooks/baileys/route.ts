@@ -78,11 +78,25 @@ export async function POST(req: NextRequest) {
     const phoneWithPlus = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
     const phoneWithoutPlus = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
     
+    // Intentar buscar primero con el formato con +
     let { data: user, error: userError } = await supabase
       .from('usuarios')
       .select('*')
-      .or(`telefono.eq.${phoneWithPlus},telefono.eq.${phoneWithoutPlus}`)
+      .eq('telefono', phoneWithPlus)
       .single();
+
+    // Si no se encontró con +, intentar sin +
+    if (userError || !user) {
+      console.log('⚠️ No encontrado con formato +, intentando sin +...');
+      const { data: user2, error: userError2 } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('telefono', phoneWithoutPlus)
+        .single();
+      
+      user = user2;
+      userError = userError2;
+    }
 
     if (userError || !user) {
       console.log('❌ Usuario no está registrado:', phoneNumber);
