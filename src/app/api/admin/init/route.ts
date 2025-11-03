@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createInitialAdmin } from '@/lib/supabase-auth'
 
+// Force dynamic rendering - Vercel cache buster
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   try {
     console.log('🔧 Initializing admin user in real Supabase database...')
