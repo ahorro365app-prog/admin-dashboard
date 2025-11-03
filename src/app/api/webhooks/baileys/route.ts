@@ -21,7 +21,7 @@ function construirPreviewMultiple(transactions: GroqTransaction[], processedType
   transactions.forEach((tx, i) => {
     const emoji = tx.tipo === 'ingreso' ? '📈' : '📉';
     const signo = tx.tipo === 'ingreso' ? '+' : '';
-    preview += `${i+1}️⃣ ${emoji} *${signo}${tx.monto} ${tx.moneda || 'Bs'}* (${tx.categoria})\n`;
+    preview += `*${i+1})* ${emoji} *${signo}${tx.monto} ${tx.moneda || 'Bs'}* (${tx.categoria})\n`;
     preview += `   ${tx.descripcion}\n`;
     preview += `   💳 ${tx.metodoPago}\n\n`;
   });
