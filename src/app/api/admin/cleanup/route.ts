@@ -10,6 +10,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runNightlyCleanup } from '@/lib/cleanup-service';
 
+// Force dynamic rendering - Vercel cache buster
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 export async function POST(req: NextRequest) {
   try {
     // Verificar API key (solo server-side)
