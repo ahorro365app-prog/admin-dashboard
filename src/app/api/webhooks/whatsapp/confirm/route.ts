@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
 
     const { data: prediction } = await supabase
       .from('predicciones_groq')
-      .select('resultado, original_timestamp, id')
+      .select('resultado, original_timestamp, id, parent_message_id')
       .eq('id', prediction_id_to_use)
       .single();
 
@@ -130,6 +130,12 @@ export async function POST(request: NextRequest) {
         success: false,
         error: 'Predicción no encontrada'
       }, { status: 404 });
+    }
+
+    // Si no obtuvimos parent_message_id en el paso anterior, intentar obtenerlo de la predicción
+    if (!parent_message_id && prediction.parent_message_id) {
+      parent_message_id = prediction.parent_message_id;
+      console.log(`🔍 parent_message_id obtenido de la predicción: ${parent_message_id}`);
     }
 
     // ============================================================
