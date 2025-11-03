@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Force dynamic rendering - Vercel cache buster
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 const BAILEYS_WORKER_URL = process.env.NEXT_PUBLIC_BAILEYS_WORKER_URL || 'http://localhost:3004';
 
 export async function GET(request: NextRequest) {
