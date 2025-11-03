@@ -85,10 +85,12 @@ export async function POST(request: NextRequest) {
     let prediction_id_to_use = prediction_id;
     let parent_message_id: string | null = null;
     
+    console.log(`🔍 prediction_id recibido: ${prediction_id || 'null'}`);
+    
     // Si no viene prediction_id, obtener la transacción pendiente más reciente
     if (!prediction_id_to_use) {
       console.log('🔍 No hay prediction_id, buscando transacción pendiente más reciente...');
-      const { data: pendingConf } = await supabase
+      const { data: pendingConf, error: pendingError } = await supabase
         .from('pending_confirmations')
         .select('prediction_id, parent_message_id')
         .eq('usuario_id', usuario_id)
@@ -97,7 +99,10 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .single();
 
+      console.log('🔍 Resultado query pending_confirmations:', { pendingConf, pendingError });
+
       if (!pendingConf) {
+        console.log('❌ No se encontró transacción pendiente');
         return NextResponse.json({
           success: false,
           message: '❌ No hay ninguna transacción pendiente para confirmar'
@@ -107,6 +112,7 @@ export async function POST(request: NextRequest) {
       prediction_id_to_use = pendingConf.prediction_id;
       parent_message_id = pendingConf.parent_message_id;
       console.log(`✅ Transacción pendiente encontrada: ${prediction_id_to_use}`);
+      console.log(`🔍 parent_message_id obtenido: ${parent_message_id || 'null'}`);
       
       if (parent_message_id) {
         console.log(`✅ Parent message ID detectado: ${parent_message_id} (múltiples TX)`);
