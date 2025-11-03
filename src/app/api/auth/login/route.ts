@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processLogin, COOKIE_CONFIG, REFRESH_COOKIE_CONFIG } from '@/lib/supabase-auth'
 
+// Force dynamic rendering - Vercel cache buster
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   console.log('🔐 Real Supabase Login API called')
   
