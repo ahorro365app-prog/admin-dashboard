@@ -177,16 +177,33 @@ export async function POST(req: NextRequest) {
       console.log('⏳ Confirmación pendiente creada (30 min)');
     }
 
-    // 8. Construir mensaje preview (NO crear transacción aún)
+    // 8. Verificar si hay múltiples transacciones pendientes
+    let pendingCount = 0;
+    if (requireConfirmation && !cached) {
+      const { count } = await supabase
+        .from('pending_confirmations')
+        .select('*', { count: 'exact', head: true })
+        .eq('usuario_id', user.id)
+        .is('confirmed', null);
+      
+      pendingCount = count || 0;
+      console.log(`📊 Transacciones pendientes: ${pendingCount}`);
+    }
+
+    // 9. Construir mensaje preview (NO crear transacción aún)
     const processedType = type === 'audio' ? 'Audio' : 'Texto';
-    const previewMessage = `✅ *${processedType.toUpperCase()} PROCESADO*
+    const pendingWarning = pendingCount > 1 
+      ? `\n*⚠️ Tienes ${pendingCount} transacciones pendientes de confirmar*`
+      : '';
+    
+    const previewMessage = `✅ *${processedType.toUpperCase()} PROCESADO*${pendingWarning}
 *Monto (${expenseData?.moneda || 'Bs'}):* ${expenseData?.monto || 0}
 *Tipo de transacción:* ${expenseData?.tipo || 'gasto'}
 *Método de Pago:* ${expenseData?.metodoPago || 'efectivo'}
 *Categoría:* ${expenseData?.categoria || 'otros'}
 *Descripción:* ${expenseData?.descripcion || transcription.substring(0, 50)}
 
-*¿Está bien?*
+*¿Está bien esta última?*
 ✅ *Responde:* sí / ok / perfecto / está bien
 ⏰ Sin confirmación se guarda automáticamente en 30 minutos
 📱 (Tienes 48h para editarla en la app)`;
