@@ -357,9 +357,4 @@ export async function POST(req: NextRequest) {
   }
 }
 
-  } catch (error: any) {
-    logger.error('❌ Error processing Baileys webhook:', error);
-    return handleError(error, 'Error al procesar webhook de Baileys');
-  }
-}
 
