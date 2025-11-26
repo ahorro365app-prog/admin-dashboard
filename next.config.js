@@ -1,4 +1,5 @@
 const { withSentryConfig } = require('@sentry/nextjs')
+const path = require('path')
 
 /** @type {import('next').NextConfig} */
 const isProduction = process.env.NODE_ENV === 'production'
@@ -39,11 +40,11 @@ const nextConfig = {
   swcMinify: true,
 
   // Configuración de webpack para resolver path aliases
-  webpack: (config, { isServer }) => {
+  webpack: (config) => {
     // Resolver path aliases
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': require('path').resolve(__dirname, 'src'),
+      '@': path.resolve(__dirname, 'src'),
     }
     return config
   },
