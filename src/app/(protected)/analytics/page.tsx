@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, RefreshCcw, Download, Settings } from 'lucide-react'
+import { ArrowLeft, RefreshCcw, Download } from 'lucide-react'
 import AuditLogsPage from '../audit-logs/page'
 import { ExportModal } from '@/components/common/ExportModal'
 

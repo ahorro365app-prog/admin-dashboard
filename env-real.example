@@ -12,6 +12,11 @@ NEXT_PUBLIC_SUPABASE_URL="https://tu-proyecto.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1LXByb3llY3RvIiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTk5OTk5OTksImV4cCI6MjAxNTU3NTk5OX0.ejemplo"
 SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1LXByb3llY3RvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY5OTk5OTk5OSwiZXhwIjoyMDE1NTc1OTk5fQ.ejemplo"
 
+# URL base del core (app Next principal) para notificaciones.
+# Desarrollo: http://localhost:3000
+# Producción: dominio público del core (ej. https://ahorro365.vercel.app)
+NEXT_PUBLIC_CORE_API_URL="http://localhost:3000"
+
 # ===========================================
 # CONFIGURACIÓN JWT (OBLIGATORIO)
 # ===========================================

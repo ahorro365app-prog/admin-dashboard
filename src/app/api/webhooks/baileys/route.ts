@@ -4,6 +4,8 @@ import { groqService } from '@/services/groqService';
 import { createClient } from '@supabase/supabase-js';
 import { insertPredictionWithDedup, checkDuplicateWhatsAppMessage } from '@/lib/whatsapp-deduplication-endpoint';
 import type { GroqTransaction, GroqMultipleResponse } from '@/services/groqService';
+import { handleError, handleValidationError } from '@/lib/errorHandler';
+import { logger, webhookLogger } from '@/lib/logger';
 
 // Force dynamic rendering - Vercel cache buster
 export const dynamic = 'force-dynamic';
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    console.log('📱 Webhook Baileys recibido:', {
+    webhookLogger.received('Baileys', {
       from: body.from,
       type: body.type,
       hasAudio: !!body.audioBase64,
@@ -49,29 +51,29 @@ export async function POST(req: NextRequest) {
     });
 
     // Baileys envía: 
-    // Audio: { audioBase64: string, from: string, type: 'audio', timestamp: number }
+    // Audio: { audioBase64: string, from: string, type: 'audio', timestamp: number, audioDurationSeconds?: number }
     // Texto: { text: string, from: string, type: 'text', timestamp: number }
-    const { audioBase64, text, from, type, timestamp, wa_message_id } = body;
+    const { audioBase64, text, from, type, timestamp, wa_message_id, audioDurationSeconds } = body;
 
     // Solo procesar audio o texto
     if (type !== 'audio' && type !== 'text') {
-      console.log('❌ Message type not supported:', type);
+      logger.warn('❌ Message type not supported:', type);
       return NextResponse.json({ status: 'ignored', message: 'Only audio and text messages are processed' });
     }
 
     // Validar que tenga los datos necesarios según el tipo
     if (type === 'audio' && !audioBase64) {
-      console.error('❌ No audio data in message');
-      return NextResponse.json({ error: 'No audio data' }, { status: 400 });
+      logger.error('❌ No audio data in message');
+      return handleValidationError('No audio data in message');
     }
 
     if (type === 'text' && !text) {
-      console.error('❌ No text data in message');
-      return NextResponse.json({ error: 'No text data' }, { status: 400 });
+      logger.error('❌ No text data in message');
+      return handleValidationError('No text data in message');
     }
 
     const phoneNumber = from.replace('@s.whatsapp.net', '');
-    console.log(`📱 WhatsApp ${type} from:`, phoneNumber);
+    logger.debug(`📱 WhatsApp ${type} from:`, phoneNumber);
 
     // 1. VERIFICAR SI EL USUARIO ESTÁ REGISTRADO (ANTES de procesar con Groq)
     // Intentar buscar con ambos formatos (con y sin +)
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest) {
 
     // Si no se encontró con +, intentar sin +
     if (userError || !user) {
-      console.log('⚠️ No encontrado con formato +, intentando sin +...');
+      logger.debug('⚠️ No encontrado con formato +, intentando sin +...');
       const { data: user2, error: userError2 } = await supabase
         .from('usuarios')
         .select('*')
@@ -99,8 +101,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (userError || !user) {
-      console.log('❌ Usuario no está registrado:', phoneNumber);
-      console.log('💡 Retornando SIN procesar mensaje (ahorro de recursos de Groq)');
+      logger.debug('❌ Usuario no está registrado:', phoneNumber);
+      logger.debug('💡 Retornando SIN procesar mensaje (ahorro de recursos de Groq)');
       
       // 2. Verificar rate limit para mensajes de invitación (evitar spam)
       // Solo enviar mensaje de invitación si han pasado más de 24 horas desde el último
@@ -111,14 +113,14 @@ export async function POST(req: NextRequest) {
       const debeEnviarMensaje = rateLimitCheck === true;
 
       if (debeEnviarMensaje) {
-        console.log('✅ Rate limit OK: Puede enviar mensaje de invitación');
+        logger.debug('✅ Rate limit OK: Puede enviar mensaje de invitación');
         // Registrar que se enviará el mensaje (se registrará después de que el worker lo envíe)
         await supabase.rpc('registrar_mensaje_invitacion', {
           telefono_param: phoneNumber
         });
       } else {
-        console.log('⏸️ Rate limit: Ya se envió mensaje recientemente (últimas 24h)');
-        console.log('💡 Ignorando mensaje para evitar spam');
+        logger.debug('⏸️ Rate limit: Ya se envió mensaje recientemente (últimas 24h)');
+        logger.debug('💡 Ignorando mensaje para evitar spam');
       }
 
       // IMPORTANTE: Retornamos SIN procesar el mensaje para no gastar recursos de Groq
@@ -129,15 +131,15 @@ export async function POST(req: NextRequest) {
         should_send_invitation: debeEnviarMensaje // Flag para indicar si debe enviar mensaje
       }, { status: 200 }); // Status 200 para que Baileys Worker maneje el mensaje
     } else {
-      console.log('✅ Usuario existente encontrado:', user.id);
-      console.log('💡 Continuando con procesamiento de', type, '...');
+      logger.debug('✅ Usuario existente encontrado:', user.id);
+      logger.debug('💡 Continuando con procesamiento de', type, '...');
     }
 
     // 2. Si viene wa_message_id y ya existe en BD, devolver caché sin reprocesar
     if (wa_message_id) {
       const cached = await checkDuplicateWhatsAppMessage(wa_message_id);
       if (cached) {
-        console.log('📦 Mensaje duplicado en caché (early return)');
+        logger.debug('📦 Mensaje duplicado en caché (early return)');
         const result = (cached as any).resultado || null;
         return NextResponse.json({
           success: true,
@@ -154,37 +156,68 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Obtener transcripción según el tipo de mensaje
+    // 3. Validar límites antes de procesar
+    const currentPlan = (user.suscripcion || 'free') as 'free' | 'smart' | 'pro' | 'caducado';
+    
+    // Validar longitud de texto (100 caracteres máximo para todos los planes)
+    if (type === 'text' && text) {
+      const maxTextLength = 100; // Límite igual para todos los planes
+      if (text.length > maxTextLength) {
+        logger.warn(`❌ Texto excede límite: ${text.length}/${maxTextLength} caracteres`);
+        return NextResponse.json({
+          success: false,
+          error: 'TEXT_LENGTH_EXCEEDED',
+          message: `El texto no puede exceder ${maxTextLength} caracteres. Por favor, envía un mensaje más corto. (${text.length}/${maxTextLength} caracteres)`,
+        }, { status: 400 });
+      }
+    }
+
+    // Validar duración de audio (15 segundos máximo para todos los planes)
+    if (type === 'audio' && audioDurationSeconds !== null && audioDurationSeconds !== undefined) {
+      const maxAudioDuration = 15; // Límite igual para todos los planes
+      if (audioDurationSeconds > maxAudioDuration) {
+        logger.warn(`❌ Audio excede límite: ${audioDurationSeconds}s (max ${maxAudioDuration}s)`);
+        return NextResponse.json({
+          success: false,
+          error: 'AUDIO_DURATION_EXCEEDED',
+          message: `El audio no puede exceder ${maxAudioDuration} segundos. Duración recibida: ${audioDurationSeconds} segundos. Por favor, envía un audio más corto.`,
+          duration: audioDurationSeconds,
+          maxDuration: maxAudioDuration
+        }, { status: 400 });
+      }
+    }
+
+    // 4. Obtener transcripción según el tipo de mensaje
     let transcription: string;
 
     if (type === 'audio') {
       // Para audio: convertir base64 a File y transcribir
     const audioBuffer = Buffer.from(audioBase64, 'base64');
     const audioBlob = new Blob([audioBuffer], { type: 'audio/ogg; codecs=opus' });
-    console.log('✅ Audio converted from base64:', audioBlob.size, 'bytes');
+    logger.debug('✅ Audio converted from base64:', audioBlob.size, 'bytes');
 
     const audioFile = new File([audioBlob], 'audio.ogg', { type: 'audio/ogg; codecs=opus' });
 
       // Transcribir con Groq Whisper
       transcription = await groqWhisperService.transcribe(audioFile, 'es');
-    console.log('✅ Transcription:', transcription);
+    logger.debug('✅ Transcription:', transcription);
     } else {
       // Para texto: usar directamente el texto como "transcripción"
       transcription = text;
-      console.log('✅ Using text as transcription:', transcription);
+      logger.debug('✅ Using text as transcription:', transcription);
     }
 
-    // 4. Extraer datos con Groq LLM - MÚLTIPLES TRANSACCIONES
+    // 5. Extraer datos con Groq LLM - MÚLTIPLES TRANSACCIONES
     const groqResult: GroqMultipleResponse | null = await groqService.processTranscriptionMultiple(
       transcription,
       user.country_code || 'BOL'
     );
     
-    console.log('✅ Groq multiple result:', groqResult);
-    console.log('🔍 DEBUG: groqResult?.esMultiple:', groqResult?.esMultiple);
-    console.log('🔍 DEBUG: groqResult?.transacciones?.length:', groqResult?.transacciones?.length);
+    logger.debug('✅ Groq multiple result:', groqResult);
+    logger.debug('🔍 DEBUG: groqResult?.esMultiple:', groqResult?.esMultiple);
+    logger.debug('🔍 DEBUG: groqResult?.transacciones?.length:', groqResult?.transacciones?.length);
     
-    // 5. Verificar configuración de confirmación por país
+    // 6. Verificar configuración de confirmación por país
     const { data: config } = await supabase
       .from('feedback_confirmation_config')
       .select('require_confirmation')
@@ -193,7 +226,7 @@ export async function POST(req: NextRequest) {
 
     const requireConfirmation = config?.require_confirmation ?? true;
     
-    // 6. Procesar según si es múltiple o simple
+    // 7. Procesar según si es múltiple o simple
     const now = new Date().toISOString();
     let cached = false;
     let prediction: any = null;
@@ -201,7 +234,7 @@ export async function POST(req: NextRequest) {
     let pendingCount = 0;
     
     if (groqResult?.esMultiple && groqResult.transacciones.length > 1) {
-      console.log(`✅ MÚLTIPLES transacciones detectadas: ${groqResult.transacciones.length}`);
+      logger.debug(`✅ MÚLTIPLES transacciones detectadas: ${groqResult.transacciones.length}`);
       
       // Crear una predicción por cada transacción
       const predictions: any[] = [];
@@ -239,15 +272,15 @@ export async function POST(req: NextRequest) {
           });
         }
         
-        console.log(`⏳ ${predictions.length} confirmaciones pendientes creadas (30 min)`);
+        logger.debug(`⏳ ${predictions.length} confirmaciones pendientes creadas (30 min)`);
         pendingCount = predictions.length;
       }
     } else {
       // Comportamiento SIMPLE (1 transacción) - compatibilidad
-      console.log('⚠️ Modo SIMPLE activado');
-      console.log('🔍 DEBUG: groqResult es null?', groqResult === null);
-      console.log('🔍 DEBUG: esMultiple?', groqResult?.esMultiple);
-      console.log('🔍 DEBUG: transacciones length?', groqResult?.transacciones?.length);
+      logger.debug('⚠️ Modo SIMPLE activado');
+      logger.debug('🔍 DEBUG: groqResult es null?', groqResult === null);
+      logger.debug('🔍 DEBUG: esMultiple?', groqResult?.esMultiple);
+      logger.debug('🔍 DEBUG: transacciones length?', groqResult?.transacciones?.length);
       expenseData = groqResult?.transacciones[0];
       const { cached: isCached, data: pred } = await insertPredictionWithDedup({
         usuario_id: user.id,
@@ -274,7 +307,7 @@ export async function POST(req: NextRequest) {
           expires_at: expiresAt.toISOString()
         });
         
-        console.log('⏳ Confirmación pendiente creada (30 min)');
+        logger.debug('⏳ Confirmación pendiente creada (30 min)');
         pendingCount = 1;
       }
     }
@@ -301,7 +334,7 @@ export async function POST(req: NextRequest) {
 📱 (Tienes 48h para editarla en la app)`;
     }
 
-    console.log('📤 Preview message generado');
+    logger.debug('📤 Preview message generado');
 
     return NextResponse.json({
       success: true,
@@ -319,11 +352,29 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('❌ Error processing Baileys webhook:', error);
-    return NextResponse.json({
-      error: 'Internal server error',
-      details: error.message
-    }, { status: 500 });
+    logger.error('❌ Error processing Baileys webhook:', error);
+    return handleError(error, 'Error al procesar webhook de Baileys');
+  }
+}
+
+
+      success: true,
+      cached,
+      prediction_id: prediction?.id,
+      transaction_id: prediction?.id, // Para compatibilidad con Worker
+      transcription,
+      expense_data: expenseData,
+      amount: expenseData?.monto || 0,
+      currency: expenseData?.moneda || 'BOB',
+      category: expenseData?.categoria || 'otros',
+      processing_time_ms: Date.now() - startTime,
+      message_type: type,
+      preview_message: previewMessage
+    });
+
+  } catch (error: any) {
+    logger.error('❌ Error processing Baileys webhook:', error);
+    return handleError(error, 'Error al procesar webhook de Baileys');
   }
 }
 

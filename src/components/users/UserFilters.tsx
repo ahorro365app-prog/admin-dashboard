@@ -18,6 +18,8 @@ interface UserFiltersProps {
     search: string
     subscription: string
     country: string
+    whatsappVerified: string
+    expirationStatus: string
   }) => void
   loading?: boolean
 }
@@ -26,7 +28,9 @@ export function UserFilters({ onFilterChange, loading = false }: UserFiltersProp
   const [filters, setFilters] = useState({
     search: '',
     subscription: '',
-    country: ''
+    country: '',
+    whatsappVerified: '',
+    expirationStatus: ''
   })
 
   const handleFilterChange = (key: string, value: string) => {
@@ -41,7 +45,7 @@ export function UserFilters({ onFilterChange, loading = false }: UserFiltersProp
         Filtros de Búsqueda
       </h3>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Búsqueda por nombre */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -70,7 +74,9 @@ export function UserFilters({ onFilterChange, loading = false }: UserFiltersProp
           >
             <option value="">Todos</option>
             <option value="free">Free</option>
-            <option value="premium">Premium</option>
+            <option value="smart">Smart</option>
+            <option value="pro">Pro</option>
+            <option value="caducado">Caducado</option>
           </select>
         </div>
 
@@ -101,13 +107,50 @@ export function UserFilters({ onFilterChange, loading = false }: UserFiltersProp
             <option value="EU">Europa</option>
           </select>
         </div>
+
+        {/* Filtro por WhatsApp verificado */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            WhatsApp Verificado
+          </label>
+          <select
+            value={filters.whatsappVerified}
+            onChange={(e) => handleFilterChange('whatsappVerified', e.target.value)}
+            disabled={loading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+          >
+            <option value="">Todos</option>
+            <option value="true">Verificados</option>
+            <option value="false">No verificados</option>
+          </select>
+        </div>
+
+        {/* Filtro por vencimiento */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Estado de vencimiento
+          </label>
+          <select
+            value={filters.expirationStatus}
+            onChange={(e) => handleFilterChange('expirationStatus', e.target.value)}
+            disabled={loading}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+          >
+            <option value="">Todos</option>
+            <option value="expired">Expirados</option>
+            <option value="expires_today">Expira hoy</option>
+            <option value="expires_7">Vence en ≤ 7 días</option>
+            <option value="active">Vence en > 7 días</option>
+            <option value="no_expiration">Sin fecha</option>
+          </select>
+        </div>
       </div>
 
       {/* Botón de limpiar filtros */}
       <div className="mt-4 flex justify-end">
         <button
           onClick={() => {
-            const clearedFilters = { search: '', subscription: '', country: '' }
+            const clearedFilters = { search: '', subscription: '', country: '', whatsappVerified: '', expirationStatus: '' }
             setFilters(clearedFilters)
             onFilterChange(clearedFilters)
           }}

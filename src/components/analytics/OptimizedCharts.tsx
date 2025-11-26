@@ -18,7 +18,7 @@ import {
   Legend, 
   ResponsiveContainer
 } from 'recharts'
-import { Loading, ChartLoading } from '@/components/common/Loading'
+import { ChartLoading } from '@/components/common/Loading'
 
 interface ChartData {
   transactions7Days: { name: string; gastos: number; ingresos: number; neto: number }[]

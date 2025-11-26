@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Loader2, RefreshCcw, Database, Users, TrendingUp, Settings } from 'lucide-react'
+import { Loader2, RefreshCcw, Database } from 'lucide-react'
 
 interface LoadingProps {
   size?: 'sm' | 'md' | 'lg' | 'xl'

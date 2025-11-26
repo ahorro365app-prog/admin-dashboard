@@ -5,6 +5,7 @@ import { UserFilters } from '@/components/users/UserFilters'
 import { UsersTable } from '@/components/users/UsersTable'
 import { Pagination } from '@/components/users/Pagination'
 import { EditUserModal } from '@/components/users/EditUserModal'
+import { getCSRFToken } from '@/lib/csrf-client'
 
 interface User {
   id: string
@@ -15,6 +16,9 @@ interface User {
   moneda?: string
   presupuesto_diario?: number
   suscripcion?: string
+  whatsapp_verificado?: boolean
+  fecha_expiracion_suscripcion?: string | null
+  daysToExpire?: number | null
 }
 
 interface PaginationData {
@@ -43,7 +47,9 @@ export default function UsersPage() {
   const [filters, setFilters] = useState({
     search: '',
     subscription: '',
-    country: ''
+    country: '',
+    whatsappVerified: '',
+    expirationStatus: ''
   })
   
   // Estados para modales
@@ -65,7 +71,9 @@ export default function UsersPage() {
         limit: pagination.limit.toString(),
         ...(filters.search && { search: filters.search }),
         ...(filters.subscription && { subscription: filters.subscription }),
-        ...(filters.country && { country: filters.country })
+        ...(filters.country && { country: filters.country }),
+        ...(filters.whatsappVerified && { whatsappVerified: filters.whatsappVerified }),
+        ...(filters.expirationStatus && { expirationStatus: filters.expirationStatus })
       })
 
       const response = await fetch(`/api/users/crud?${params}`)
@@ -93,6 +101,49 @@ export default function UsersPage() {
 
   const handlePageChange = (page: number) => {
     setPagination(prev => ({ ...prev, page }))
+  }
+
+  const revalidateElevatedAccess = async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const input = window.prompt('Para continuar, ingresa tu código 2FA (TOTP de 6 dígitos o código de respaldo de 8 caracteres).')
+      if (!input) {
+        throw new Error('Revalidación 2FA cancelada por el usuario')
+      }
+
+      const token = input.toUpperCase().replace(/[^A-Z0-9]/g, '')
+      if (token.length < 6) {
+        alert('El código debe tener al menos 6 caracteres.')
+        continue
+      }
+
+      try {
+        const csrfToken = await getCSRFToken()
+        const response = await fetch('/api/auth/revalidate-2fa', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken,
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            token,
+            csrfToken,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (response.ok && data?.success) {
+          return true
+        }
+
+        alert(data?.message || 'Código 2FA inválido. Inténtalo nuevamente.')
+      } catch (error: any) {
+        alert('Error al revalidar 2FA: ' + error.message)
+      }
+    }
+
+    throw new Error('No se pudo revalidar el 2FA después de 3 intentos.')
   }
 
   const handleEditUser = (user: User) => {
@@ -125,27 +176,81 @@ export default function UsersPage() {
       setSaving(true)
       console.log('💾 Saving user:', editingUser.id, userData)
 
+      const csrfToken = await getCSRFToken()
+
+      const payload: Record<string, any> = {
+        id: editingUser.id,
+        csrfToken,
+      }
+
+      Object.entries(userData).forEach(([key, value]) => {
+        if (value === undefined || value === '') {
+          return;
+        }
+        if (key === 'presupuesto_diario' && (typeof value !== 'number' || value <= 0)) {
+          return
+        }
+        if (key === 'fecha_expiracion_suscripcion') {
+          if (!value) {
+            payload[key] = null
+          } else {
+            try {
+              const isoDate = new Date(`${value}T23:59:59`).toISOString()
+              payload[key] = isoDate
+            } catch (error) {
+              console.error('Error parsing expiration date:', error)
+            }
+          }
+        } else {
+          payload[key] = value
+        }
+      })
+
+      console.log('📦 Payload enviado:', payload)
+
+      const bodyString = JSON.stringify(payload)
+
+      const sendRequest = async () => {
       const response = await fetch('/api/users/crud', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
         },
-        body: JSON.stringify({
-          id: editingUser.id,
-          ...userData
-        })
+        credentials: 'include',
+          body: bodyString,
       })
 
-      const data = await response.json()
+      const raw = await response.text()
+      let data: any = null
+      try {
+        data = raw ? JSON.parse(raw) : null
+      } catch (error) {
+        console.error('💥 Error parsing response JSON:', error, raw)
+        }
 
-      if (data.success) {
+        return { response, data }
+      }
+
+      let { response, data } = await sendRequest()
+
+      if (response.status === 428) {
+        await revalidateElevatedAccess()
+        ;({ response, data } = await sendRequest())
+      }
+
+      if (response.ok && data?.success) {
         console.log('✅ User saved successfully')
         // Actualizar la lista de usuarios
         await fetchUsers()
         setIsEditModalOpen(false)
         setEditingUser(null)
       } else {
-        throw new Error(data.message)
+        const message =
+          data?.message ||
+          data?.error ||
+          `HTTP ${response.status} ${response.statusText}`
+        throw new Error(message)
       }
     } catch (error: any) {
       console.error('💥 Error saving user:', error)

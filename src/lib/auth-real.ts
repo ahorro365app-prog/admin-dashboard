@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import jwt from 'jsonwebtoken'
+import { comparePassword, isBcryptHash } from './bcrypt-helpers'
 
 // Configuración de Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -69,8 +70,33 @@ export async function validateCredentials(credentials: LoginCredentials): Promis
 
     console.log('✅ Admin user found:', admin.email)
 
-    // Verificar contraseña (en producción usar bcrypt)
-    if (password === admin.password_hash) {
+    // Verificar contraseña con bcrypt
+    // Soporta migración: si el hash no es bcrypt, compara en texto plano (temporal)
+    let passwordMatch = false;
+    
+    if (isBcryptHash(admin.password_hash)) {
+      // Hash bcrypt válido, usar comparación segura
+      passwordMatch = await comparePassword(password, admin.password_hash);
+    } else {
+      // Hash en texto plano (migración temporal)
+      // Si coincide, hashear y actualizar en la BD
+      if (password === admin.password_hash) {
+        console.log('⚠️ Password en texto plano detectado, migrando a bcrypt...');
+        const { hashPassword } = await import('./bcrypt-helpers');
+        const hashedPassword = await hashPassword(password);
+        
+        // Actualizar contraseña en la BD
+        await supabase
+          .from('admin_users')
+          .update({ password_hash: hashedPassword })
+          .eq('id', admin.id);
+        
+        passwordMatch = true;
+        console.log('✅ Contraseña migrada a bcrypt');
+      }
+    }
+
+    if (passwordMatch) {
       console.log('✅ Password match')
       return admin
     } else {
@@ -183,9 +209,13 @@ export async function createInitialAdmin(): Promise<boolean> {
   try {
     console.log('🔧 Creating initial admin user...')
     
+    // Hashear contraseña con bcrypt
+    const { hashPassword } = await import('./bcrypt-helpers');
+    const hashedPassword = await hashPassword('admin123');
+    
     const adminData = {
       email: 'admin@demo.com',
-      password_hash: 'admin123', // En producción usar bcrypt
+      password_hash: hashedPassword, // Contraseña hasheada con bcrypt
       role: 'admin' as const,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()

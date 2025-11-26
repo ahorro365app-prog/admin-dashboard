@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { handleError } from '@/lib/errorHandler';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering - Vercel cache buster
 export const dynamic = 'force-dynamic';
@@ -10,6 +12,67 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+/**
+ * @swagger
+ * /api/whatsapp/health:
+ *   get:
+ *     summary: Verifica el estado de salud de WhatsApp y servicios relacionados
+ *     description: Retorna el estado de salud de Baileys Worker, Supabase y el backend. Verifica la conexión de WhatsApp basándose en la última sincronización (conectado si last_sync es menor a 2 minutos).
+ *     tags: [WhatsApp]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Estado de salud obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 baileys:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [ok, degraded]
+ *                       example: "ok"
+ *                     lastSync:
+ *                       type: string
+ *                       format: date-time
+ *                       nullable: true
+ *                 supabase:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [ok, error]
+ *                       example: "ok"
+ *                 backend:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       example: "ok"
+ *                     time:
+ *                       type: string
+ *                       format: date-time
+ *       401:
+ *         description: No autenticado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Error al verificar estado de salud
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ * 
+ * @route GET /api/whatsapp/health
+ * @description Verifica el estado de salud de WhatsApp y servicios relacionados
+ * @security Requiere autenticación de administrador (cookie)
+ */
 export async function GET(request: NextRequest) {
   try {
     // Verificar conexión a Supabase
@@ -31,11 +94,8 @@ export async function GET(request: NextRequest) {
       supabase: { status: supabaseOk ? 'ok' : 'error' },
       backend: { status: 'ok', time: now.toISOString() },
     });
-  } catch (e) {
-    return NextResponse.json({
-      baileys: { status: 'error' },
-      supabase: { status: 'error' },
-      backend: { status: 'error' },
-    }, { status: 500 });
+  } catch (e: any) {
+    logger.error('❌ Error en health check:', e);
+    return handleError(e, 'Error al verificar estado de salud');
   }
 }

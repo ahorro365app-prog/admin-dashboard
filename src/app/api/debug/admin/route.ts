@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sanitizeDebugData, logDebugAccess } from '@/lib/debug-sanitizer'
 
 export async function GET(request: NextRequest) {
+  // ⚠️ ENDPOINT DE DEBUG - SOLO PARA DESARROLLO
+  // Bloquear en producción por seguridad
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Endpoint no disponible en producción' },
+      { status: 404 }
+    );
+  }
+
   try {
+    // Logging de acceso
+    logDebugAccess('/api/debug/admin', request);
+    
     console.log('🔍 Debug: Checking admin user in database...')
     
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -33,24 +46,21 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Sanitizar datos antes de retornar
+    const sanitizedAdmin = sanitizeDebugData(admin);
+    
     console.log('✅ Admin user found:', {
-      id: admin.id,
-      email: admin.email,
-      role: admin.role,
-      password_hash: admin.password_hash,
-      created_at: admin.created_at
+      id: sanitizedAdmin.id,
+      email: sanitizedAdmin.email,
+      role: sanitizedAdmin.role,
+      password_hash: '***REDACTED***',
+      created_at: sanitizedAdmin.created_at
     })
 
     return NextResponse.json({
       success: true,
       message: 'Admin user found',
-      data: {
-        id: admin.id,
-        email: admin.email,
-        role: admin.role,
-        password_hash: admin.password_hash,
-        created_at: admin.created_at
-      }
+      data: sanitizedAdmin
     })
 
   } catch (error) {

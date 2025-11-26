@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { handleError } from '@/lib/errorHandler';
+import { logger } from '@/lib/logger';
 
 // Force dynamic rendering - Vercel cache buster
 export const dynamic = 'force-dynamic';
@@ -17,14 +19,14 @@ export async function GET(req: NextRequest) {
     const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
     
     if (authHeader !== expectedAuth) {
-      console.log('❌ CRON_SECRET inválido');
+      logger.warn('❌ CRON_SECRET inválido');
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    console.log('🕐 Iniciando cron: confirm-expired');
+    logger.debug('🕐 Iniciando cron: confirm-expired');
 
     // ============================================================
     // OBTENER CONFIRMACIONES EXPIRADAS
@@ -36,15 +38,12 @@ export async function GET(req: NextRequest) {
       .is('confirmed', null);
 
     if (selectError) {
-      console.error('❌ Error obteniendo expiradas:', selectError);
-      return NextResponse.json(
-        { success: false, error: selectError.message },
-        { status: 500 }
-      );
+      logger.error('❌ Error obteniendo expiradas:', selectError);
+      return handleError(selectError, 'Error al obtener confirmaciones expiradas');
     }
 
     if (!expired || expired.length === 0) {
-      console.log('ℹ️ Sin confirmaciones expiradas');
+      logger.debug('ℹ️ Sin confirmaciones expiradas');
       return NextResponse.json({
         success: true,
         processed: 0,
@@ -52,7 +51,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    console.log(`⏰ Encontradas ${expired.length} confirmaciones expiradas`);
+    logger.debug(`⏰ Encontradas ${expired.length} confirmaciones expiradas`);
 
     // ============================================================
     // PROCESAR CADA EXPIRADA
@@ -70,7 +69,7 @@ export async function GET(req: NextRequest) {
           .single();
 
         if (!prediction) {
-          console.warn(`⚠️ Predicción no encontrada: ${exp.prediction_id}`);
+          logger.warn(`⚠️ Predicción no encontrada: ${exp.prediction_id}`);
           errors++;
           continue;
         }
@@ -100,7 +99,7 @@ export async function GET(req: NextRequest) {
               moneda: prediction.resultado?.moneda || 'BOB'
             });
           
-          console.log(`✅ Transacción creada (timeout): ${prediction.original_timestamp}`);
+          logger.debug(`✅ Transacción creada (timeout): ${prediction.original_timestamp}`);
         }
 
         // Marcar confirmación como completada
@@ -112,21 +111,16 @@ export async function GET(req: NextRequest) {
           })
           .eq('id', exp.id);
 
-        console.log(`✅ Auto-guardada (TIMEOUT 30min): ${exp.prediction_id}`);
+        logger.debug(`✅ Auto-guardada (TIMEOUT 30min): ${exp.prediction_id}`);
         processed++;
 
       } catch (err) {
-        console.error(`❌ Error procesando ${exp.prediction_id}:`, err);
+        logger.error(`❌ Error procesando ${exp.prediction_id}:`, err);
         errors++;
       }
     }
 
-    console.log(`
-🎉 CRON COMPLETADO:
-   - Procesadas: ${processed}
-   - Errores: ${errors}
-   - Total: ${processed + errors}
-    `);
+    logger.success(`🎉 CRON COMPLETADO: Procesadas: ${processed}, Errores: ${errors}, Total: ${processed + errors}`);
 
     return NextResponse.json({
       success: true,
@@ -136,11 +130,8 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('❌ Error crítico en cron:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    logger.error('❌ Error crítico en cron:', error);
+    return handleError(error, 'Error crítico al procesar cron de confirmaciones expiradas');
   }
 }
 

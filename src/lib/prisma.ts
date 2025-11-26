@@ -109,11 +109,101 @@ export const prisma = {
       let query = supabase.from('usuarios').select('*', { count: 'exact', head: true })
       
       if (where) {
-        Object.keys(where).forEach(key => {
-          if (where[key] !== undefined) {
-            query = query.eq(key, where[key])
+        const { OR, ...rest } = where
+
+        Object.keys(rest).forEach(key => {
+          const value = rest[key]
+
+          if (value === undefined) {
+            return
           }
+
+          if (value === null) {
+            query = query.is(key, null)
+            return
+          }
+
+          if (typeof value === 'object') {
+            if (value.contains) {
+              const pattern = `%${value.contains}%`
+              if (value.mode && value.mode.toLowerCase() === 'insensitive') {
+                query = query.ilike(key, pattern)
+              } else {
+                query = query.like(key, pattern)
+              }
+              return
+            }
+
+            if (value.gte !== undefined) {
+              query = query.gte(key, value.gte)
+            }
+
+            if (value.lte !== undefined) {
+              query = query.lte(key, value.lte)
+            }
+
+            if (Array.isArray(value.in) && value.in.length > 0) {
+              query = query.in(key, value.in)
+            }
+
+            return
+          }
+
+          query = query.eq(key, value)
         })
+
+        if (Array.isArray(OR) && OR.length > 0) {
+          const orFilters: string[] = []
+
+          OR.forEach((condition: Record<string, any>) => {
+            Object.keys(condition).forEach(field => {
+              const value = condition[field]
+              if (value === undefined) {
+                return
+              }
+
+              if (value === null) {
+                orFilters.push(`${field}.is.null`)
+                return
+              }
+
+              if (typeof value === 'object') {
+                if (value.contains) {
+                  const pattern = encodeURIComponent(`%${value.contains}%`)
+                  const operator = value.mode && value.mode.toLowerCase() === 'insensitive' ? 'ilike' : 'like'
+                  orFilters.push(`${field}.${operator}.${pattern}`)
+                  return
+                }
+
+                if (value.eq !== undefined) {
+                  orFilters.push(`${field}.eq.${encodeURIComponent(value.eq)}`)
+                  return
+                }
+
+                if (value.gte !== undefined) {
+                  orFilters.push(`${field}.gte.${encodeURIComponent(value.gte)}`)
+                }
+
+                if (value.lte !== undefined) {
+                  orFilters.push(`${field}.lte.${encodeURIComponent(value.lte)}`)
+                }
+
+                if (Array.isArray(value.in) && value.in.length > 0) {
+                  const list = value.in.map((item: any) => encodeURIComponent(item)).join(',')
+                  orFilters.push(`${field}.in.(${list})`)
+                }
+
+                return
+              }
+
+              orFilters.push(`${field}.eq.${encodeURIComponent(value)}`)
+            })
+          })
+
+          if (orFilters.length > 0) {
+            query = query.or(orFilters.join(','))
+          }
+        }
       }
       
       const { count, error } = await query

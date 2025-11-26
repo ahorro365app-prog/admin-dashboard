@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { 
   LineChart, 
   Line, 
-  AreaChart, 
   Area, 
   BarChart, 
   Bar, 
@@ -19,7 +18,7 @@ import {
   ResponsiveContainer,
   ComposedChart
 } from 'recharts'
-import { Calendar, TrendingUp, Users, DollarSign, Activity } from 'lucide-react'
+import { TrendingUp, Users, DollarSign, Activity } from 'lucide-react'
 
 interface ChartData {
   transactions7Days: { name: string; gastos: number; ingresos: number; neto: number }[]

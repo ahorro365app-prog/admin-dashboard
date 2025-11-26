@@ -9,6 +9,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd
 # IMPORTANTE: Necesitas obtener esta clave desde Supabase Dashboard > Settings > API > service_role
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvamFscWJlYnhzcXVmenZlYmlzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDM2ODY3NywiZXhwIjoyMDc1OTQ0Njc3fQ.PLACEHOLDER_SERVICE_ROLE_KEY
 
+# URL base del core (Next.js app principal) para notificaciones
+NEXT_PUBLIC_CORE_API_URL=http://localhost:3000
+
 # JWT Secret para autenticación del panel (generar una clave segura)
 JWT_SECRET=demo-secret-key-change-in-production-32-chars
 

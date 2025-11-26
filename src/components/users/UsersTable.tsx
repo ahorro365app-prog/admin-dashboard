@@ -11,6 +11,9 @@ interface User {
   moneda?: string
   presupuesto_diario?: number
   suscripcion?: string
+  whatsapp_verificado?: boolean
+  fecha_expiracion_suscripcion?: string | null
+  daysToExpire?: number | null
 }
 
 interface UsersTableProps {
@@ -21,11 +24,13 @@ interface UsersTableProps {
   onToggleBlock: (user: User) => void
 }
 
+type SortField = 'nombre' | 'suscripcion' | 'pais' | 'presupuesto_diario' | 'daysToExpire'
+
 export function UsersTable({ users, loading = false, onEditUser, onViewUser, onToggleBlock }: UsersTableProps) {
-  const [sortField, setSortField] = useState<keyof User>('nombre')
+  const [sortField, setSortField] = useState<SortField>('nombre')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
-  const handleSort = (field: keyof User) => {
+  const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
     } else {
@@ -34,22 +39,81 @@ export function UsersTable({ users, loading = false, onEditUser, onViewUser, onT
     }
   }
 
+  const compareStringsAsc = (a?: string | null, b?: string | null) => {
+    const aValue = (a || '').toString().toLowerCase()
+    const bValue = (b || '').toString().toLowerCase()
+    if (aValue === bValue) return 0
+    return aValue < bValue ? -1 : 1
+  }
+
+  const compareNumbersAsc = (a?: number | null, b?: number | null) => {
+    const aDefined = typeof a === 'number'
+    const bDefined = typeof b === 'number'
+
+    if (!aDefined && !bDefined) return 0
+    if (!aDefined) return 1
+    if (!bDefined) return -1
+
+    if (a === b) return 0
+    return (a as number) < (b as number) ? -1 : 1
+  }
+
   const sortedUsers = [...users].sort((a, b) => {
-    const aValue = a[sortField] || ''
-    const bValue = b[sortField] || ''
-    
-    if (sortDirection === 'asc') {
-      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
-    } else {
-      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
+    let comparison = 0
+
+    const isAsc = sortDirection === 'asc'
+
+    switch (sortField) {
+      case 'presupuesto_diario':
+        comparison = isAsc
+          ? compareNumbersAsc(a.presupuesto_diario, b.presupuesto_diario)
+          : compareNumbersAsc(b.presupuesto_diario, a.presupuesto_diario)
+        break
+      case 'daysToExpire':
+        comparison = isAsc
+          ? compareNumbersAsc(a.daysToExpire ?? null, b.daysToExpire ?? null)
+          : compareNumbersAsc(b.daysToExpire ?? null, a.daysToExpire ?? null)
+        break
+      case 'pais':
+        comparison = isAsc
+          ? compareStringsAsc(a.pais, b.pais)
+          : compareStringsAsc(b.pais, a.pais)
+        break
+      case 'suscripcion':
+        comparison = isAsc
+          ? compareStringsAsc(a.suscripcion, b.suscripcion)
+          : compareStringsAsc(b.suscripcion, a.suscripcion)
+        break
+      case 'nombre':
+      default:
+        comparison = isAsc
+          ? compareStringsAsc(a.nombre, b.nombre)
+          : compareStringsAsc(b.nombre, a.nombre)
+        break
     }
+
+    return comparison
   })
 
   const getPlanBadge = (suscripcion?: string) => {
-    if (suscripcion === 'premium') {
+    if (suscripcion === 'pro') {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-          ⭐ Premium
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+          💎 Pro
+        </span>
+      )
+    }
+    if (suscripcion === 'smart') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+          ✨ Smart
+        </span>
+      )
+    }
+    if (suscripcion === 'caducado') {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+          ⏰ Caducado
         </span>
       )
     }
@@ -58,6 +122,77 @@ export function UsersTable({ users, loading = false, onEditUser, onViewUser, onT
         📱 Free
       </span>
     )
+  }
+
+  const getWhatsAppBadge = (verificado?: boolean) => {
+    if (verificado) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          ✓ WhatsApp Verificado
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+        ⚠️ No verificado
+      </span>
+    )
+  }
+
+  const getExpirationBadge = (days?: number | null) => {
+    if (days === null || days === undefined) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+          Sin fecha
+        </span>
+      )
+    }
+
+    if (days < 0) {
+      const daysAgo = Math.abs(days)
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+          Expirado hace {daysAgo} día{daysAgo === 1 ? '' : 's'}
+        </span>
+      )
+    }
+
+    if (days === 0) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+          Expira hoy
+        </span>
+      )
+    }
+
+    if (days <= 7) {
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+          {days} día{days === 1 ? '' : 's'}
+        </span>
+      )
+    }
+
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+        {days} día{days === 1 ? '' : 's'}
+      </span>
+    )
+  }
+
+  const formatExpirationDate = (date?: string | null) => {
+    if (!date) return null
+    try {
+      const localeDate = new Date(date)
+      return localeDate.toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      })
+    } catch (error) {
+      console.error('Error formatting expiration date:', error)
+      return null
+    }
   }
 
   const getCountryFlag = (pais?: string) => {
@@ -156,6 +291,20 @@ export function UsersTable({ users, loading = false, onEditUser, onViewUser, onT
                   )}
                 </div>
               </th>
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('daysToExpire')}
+              >
+                <div className="flex items-center space-x-1">
+                  <span>Días por vencer</span>
+                  {sortField === 'daysToExpire' && (
+                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </div>
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                WhatsApp
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Acciones
               </th>
@@ -202,6 +351,19 @@ export function UsersTable({ users, loading = false, onEditUser, onViewUser, onT
                   ) : (
                     <span className="text-gray-400">No establecido</span>
                   )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <div className="flex flex-col">
+                    {getExpirationBadge(user.daysToExpire)}
+                    {user.fecha_expiracion_suscripcion && (
+                      <span className="text-xs text-gray-500 mt-1">
+                        {formatExpirationDate(user.fecha_expiracion_suscripcion)}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {getWhatsAppBadge(user.whatsapp_verificado)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex items-center space-x-2">

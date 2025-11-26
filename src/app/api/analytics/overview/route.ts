@@ -1,13 +1,129 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
+import { adminApiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rateLimit'
+import { handleError } from '@/lib/errorHandler'
 
 // Force dynamic rendering - Vercel cache buster
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+/**
+ * @swagger
+ * /api/analytics/overview:
+ *   get:
+ *     summary: Obtiene resumen general de analytics
+ *     description: Retorna métricas generales del sistema incluyendo ingresos totales, usuarios, tasa de conversión, valor promedio de transacciones, top países y top categorías de gastos.
+ *     tags: [Analytics]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Resumen de analytics obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalRevenue:
+ *                       type: number
+ *                       description: Ingresos totales
+ *                       example: 150000.50
+ *                     totalUsers:
+ *                       type: integer
+ *                       description: Total de usuarios
+ *                       example: 1250
+ *                     activeUsers:
+ *                       type: integer
+ *                       description: Usuarios activos (estimado)
+ *                       example: 937
+ *                     conversionRate:
+ *                       type: number
+ *                       description: Tasa de conversión a premium (%)
+ *                       example: 25.5
+ *                     avgTransactionValue:
+ *                       type: number
+ *                       description: Valor promedio de transacciones
+ *                       example: 120.75
+ *                     topCountries:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           pais:
+ *                             type: string
+ *                           usuarios:
+ *                             type: integer
+ *                     topCategories:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           categoria:
+ *                             type: string
+ *                           monto:
+ *                             type: number
+ *       401:
+ *         description: No autenticado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       429:
+ *         description: Rate limit excedido (100 requests / 15 minutos)
+ *         headers:
+ *           X-RateLimit-Limit:
+ *             schema:
+ *               type: integer
+ *               example: 100
+ *           Retry-After:
+ *             schema:
+ *               type: integer
+ *               example: 900
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ * 
+ * @route GET /api/analytics/overview
+ * @description Obtiene resumen general de analytics
+ * @security Requiere autenticación de administrador (cookie)
+ * @rateLimit 100 requests / 15 minutos
+ */
 export async function GET(request: NextRequest) {
   try {
-    console.log('📊 Fetching analytics overview...')
+    // 1. Rate limiting
+    const identifier = getClientIdentifier(request as any);
+    const rateLimitResult = await checkRateLimit(adminApiRateLimit, identifier);
+    if (!rateLimitResult?.success) {
+      logger.warn(`⛔ Rate limit exceeded for ${identifier}`);
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Demasiadas solicitudes. Por favor, intenta más tarde.',
+          retryAfter: rateLimitResult ? new Date(rateLimitResult.reset).toISOString() : 'unknown',
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': rateLimitResult ? Math.ceil((rateLimitResult.reset - Date.now()) / 1000).toString() : '900',
+            'X-RateLimit-Limit': rateLimitResult?.limit.toString() || '200',
+            'X-RateLimit-Remaining': rateLimitResult?.remaining.toString() || '0',
+            'X-RateLimit-Reset': rateLimitResult?.reset.toString() || Date.now().toString(),
+          },
+        }
+      );
+    }
+
+    logger.debug('📊 Fetching analytics overview...')
 
     // Métricas básicas
     const totalUsers = await prisma.usuario.count()
@@ -77,7 +193,7 @@ export async function GET(request: NextRequest) {
       topCategories
     }
 
-    console.log('📊 Analytics overview generated successfully')
+    logger.success('📊 Analytics overview generated successfully')
 
     return NextResponse.json({
       success: true,
@@ -85,11 +201,8 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('💥 API Error fetching analytics overview:', error)
-    return NextResponse.json(
-      { success: false, message: 'Error interno del servidor', error: (error as Error).message },
-      { status: 500 }
-    )
+    logger.error('💥 API Error fetching analytics overview:', error)
+    return handleError(error, 'Error al obtener resumen de analytics');
   }
 }
 

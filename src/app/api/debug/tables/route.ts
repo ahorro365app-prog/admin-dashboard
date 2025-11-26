@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sanitizeDebugData, logDebugAccess } from '@/lib/debug-sanitizer'
 
 export async function GET(request: NextRequest) {
+  // ⚠️ ENDPOINT DE DEBUG - SOLO PARA DESARROLLO
+  // Bloquear en producción por seguridad
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Endpoint no disponible en producción' },
+      { status: 404 }
+    );
+  }
+
   try {
+    // Logging de acceso
+    logDebugAccess('/api/debug/tables', request);
+    
     console.log('🔍 Debug: Checking what tables exist in database...')
     
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -35,10 +48,13 @@ export async function GET(request: NextRequest) {
           .select('*')
           .limit(1)
 
+        // Sanitizar datos de muestra antes de guardar
+        const sanitizedSampleData = sanitizeDebugData(data);
+        
         results[tableName] = {
           exists: !error,
           error: error?.message || null,
-          sampleData: data
+          sampleData: sanitizedSampleData
         }
         
         console.log(`📋 Table ${tableName}:`, { exists: !error, error: error?.message })

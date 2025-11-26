@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, FileText, Database, Users, TrendingUp, Calendar } from 'lucide-react'
+import { Download, FileText, Database, Users, TrendingUp } from 'lucide-react'
 
 interface ExportOptions {
   format: 'csv' | 'xlsx' | 'json' | 'pdf'

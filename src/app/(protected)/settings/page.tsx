@@ -450,13 +450,37 @@ export default function SettingsPage() {
           {/* Security Settings */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Configuración de Seguridad</h2>
+            
+            {/* 2FA Section */}
+            <div className="mb-6 pb-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Autenticación de Dos Factores (2FA)</h3>
+                  <p className="text-sm text-gray-600">
+                    Agrega una capa adicional de seguridad a tu cuenta con códigos TOTP. Escanea un QR code con tu app de autenticación.
+                  </p>
+                </div>
+                <button
+                  onClick={() => router.push('/settings/2fa')}
+                  className="ml-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+                >
+                  Configurar 2FA
+                </button>
+              </div>
+            </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900">Autenticación</h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-700">Autenticación de dos factores</span>
-                    <span className="text-sm text-green-600">Habilitada</span>
+                    <button
+                      onClick={() => router.push('/settings/2fa')}
+                      className="text-sm text-blue-600 hover:text-blue-700 underline"
+                    >
+                      Configurar
+                    </button>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-700">Sesiones simultáneas</span>

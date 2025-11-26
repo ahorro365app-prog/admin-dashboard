@@ -11,6 +11,7 @@ interface User {
   moneda?: string
   presupuesto_diario?: number
   suscripcion?: string
+  fecha_expiracion_suscripcion?: string | null
 }
 
 interface EditUserModalProps {
@@ -21,9 +22,35 @@ interface EditUserModalProps {
   loading?: boolean
 }
 
+type SubscriptionPlan = 'free' | 'smart' | 'pro' | 'caducado'
+
 export function EditUserModal({ user, isOpen, onClose, onSave, loading = false }: EditUserModalProps) {
   const [formData, setFormData] = useState<Partial<User>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const formatDateForInput = (isoDate?: string | null) => {
+    if (!isoDate) return ''
+    try {
+      const parsed = new Date(isoDate)
+      if (Number.isNaN(parsed.getTime())) return ''
+      return parsed.toISOString().split('T')[0]
+    } catch (error) {
+      console.error('Error formatting ISO date:', error)
+      return ''
+    }
+  }
+
+  const getRecommendedExpiration = (plan: SubscriptionPlan) => {
+    const daysToAdd = plan === 'pro' ? 30 : 14
+    const baseDate = new Date()
+    baseDate.setHours(0, 0, 0, 0)
+    baseDate.setDate(baseDate.getDate() + daysToAdd)
+    return baseDate.toISOString().split('T')[0]
+  }
+
+  const requiresExpiration = (plan?: SubscriptionPlan) => {
+    return plan !== 'caducado'
+  }
 
   useEffect(() => {
     if (user) {
@@ -33,13 +60,14 @@ export function EditUserModal({ user, isOpen, onClose, onSave, loading = false }
         telefono: user.telefono || '',
         pais: user.pais || '',
         moneda: user.moneda || '',
-        presupuesto_diario: user.presupuesto_diario || 0,
-        suscripcion: user.suscripcion || 'free'
+        presupuesto_diario: user.presupuesto_diario ?? undefined,
+        suscripcion: (user.suscripcion as SubscriptionPlan) || 'free',
+        fecha_expiracion_suscripcion: formatDateForInput(user.fecha_expiracion_suscripcion)
       })
     }
   }, [user])
 
-  const handleInputChange = (field: keyof User, value: string | number) => {
+  const handleInputChange = (field: keyof User, value: string | number | undefined) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     // Limpiar error del campo
     if (errors[field]) {
@@ -47,8 +75,58 @@ export function EditUserModal({ user, isOpen, onClose, onSave, loading = false }
     }
   }
 
+  const handlePlanChange = (plan: SubscriptionPlan) => {
+    setFormData(prev => {
+      const next: Partial<User> = {
+        ...prev,
+        suscripcion: plan
+      }
+
+      if (!requiresExpiration(plan)) {
+        next.fecha_expiracion_suscripcion = ''
+      } else if (!prev.fecha_expiracion_suscripcion) {
+        next.fecha_expiracion_suscripcion = getRecommendedExpiration(plan)
+      }
+
+      return next
+    })
+
+    if (errors.suscripcion) {
+      setErrors(prev => ({ ...prev, suscripcion: '' }))
+    }
+    if (errors.fecha_expiracion_suscripcion) {
+      setErrors(prev => ({ ...prev, fecha_expiracion_suscripcion: '' }))
+    }
+  }
+
+  const handleExpirationChange = (value: string) => {
+    setFormData(prev => ({ ...prev, fecha_expiracion_suscripcion: value }))
+    if (errors.fecha_expiracion_suscripcion) {
+      setErrors(prev => ({ ...prev, fecha_expiracion_suscripcion: '' }))
+    }
+  }
+
+  const handleSetRecommendedExpiration = () => {
+    const currentPlan = (formData.suscripcion as SubscriptionPlan) || 'free'
+    if (!requiresExpiration(currentPlan)) {
+      return
+    }
+
+    const recommendedDate = getRecommendedExpiration(currentPlan)
+    setFormData(prev => ({ ...prev, fecha_expiracion_suscripcion: recommendedDate }))
+    if (errors.fecha_expiracion_suscripcion) {
+      setErrors(prev => ({ ...prev, fecha_expiracion_suscripcion: '' }))
+    }
+  }
+
+  const currentPlan = (formData.suscripcion as SubscriptionPlan) || 'free'
+  const showExpirationInput = requiresExpiration(currentPlan)
+  const recommendedDaysLabel = currentPlan === 'pro' ? '30 días' : '14 días'
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
+
+    const selectedPlan = (formData.suscripcion as SubscriptionPlan) || 'free'
 
     if (!formData.nombre?.trim()) {
       newErrors.nombre = 'El nombre es requerido'
@@ -58,8 +136,31 @@ export function EditUserModal({ user, isOpen, onClose, onSave, loading = false }
       newErrors.correo = 'El email no es válido'
     }
 
-    if (formData.presupuesto_diario && formData.presupuesto_diario < 0) {
-      newErrors.presupuesto_diario = 'El presupuesto no puede ser negativo'
+    if (
+      formData.presupuesto_diario !== undefined &&
+      formData.presupuesto_diario !== null &&
+      formData.presupuesto_diario <= 0
+    ) {
+      newErrors.presupuesto_diario = 'El presupuesto debe ser mayor a 0'
+    }
+
+    if (requiresExpiration(selectedPlan)) {
+      if (!formData.fecha_expiracion_suscripcion) {
+        newErrors.fecha_expiracion_suscripcion = 'Debes definir una fecha de expiración para este plan'
+      } else {
+        const selectedDate = new Date(formData.fecha_expiracion_suscripcion)
+        selectedDate.setHours(0, 0, 0, 0)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
+        if (Number.isNaN(selectedDate.getTime())) {
+          newErrors.fecha_expiracion_suscripcion = 'Fecha de expiración inválida'
+        } else if (selectedDate < today) {
+          newErrors.fecha_expiracion_suscripcion = 'La fecha de expiración no puede ser en el pasado'
+        }
+      }
+    } else if (formData.fecha_expiracion_suscripcion) {
+      newErrors.fecha_expiracion_suscripcion = 'El plan caducado no debe tener fecha de expiración'
     }
 
     setErrors(newErrors)
@@ -218,8 +319,25 @@ export function EditUserModal({ user, isOpen, onClose, onSave, loading = false }
                 type="number"
                 min="0"
                 step="0.01"
-                value={formData.presupuesto_diario || ''}
-                onChange={(e) => handleInputChange('presupuesto_diario', parseFloat(e.target.value) || 0)}
+                value={
+                  formData.presupuesto_diario !== undefined &&
+                  formData.presupuesto_diario !== null
+                    ? formData.presupuesto_diario
+                    : ''
+                }
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (value === '') {
+                    handleInputChange('presupuesto_diario', undefined)
+                    return
+                  }
+                  const parsed = parseFloat(value)
+                  if (Number.isNaN(parsed)) {
+                    handleInputChange('presupuesto_diario', undefined)
+                  } else {
+                    handleInputChange('presupuesto_diario', parsed)
+                  }
+                }}
                 disabled={loading}
                 className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   errors.presupuesto_diario ? 'border-red-500' : 'border-gray-300'
@@ -237,14 +355,59 @@ export function EditUserModal({ user, isOpen, onClose, onSave, loading = false }
                 Tipo de Suscripción
               </label>
               <select
-                value={formData.suscripcion || 'free'}
-                onChange={(e) => handleInputChange('suscripcion', e.target.value)}
+                value={currentPlan}
+                onChange={(e) => handlePlanChange(e.target.value as SubscriptionPlan)}
                 disabled={loading}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               >
-                <option value="free">📱 Free</option>
-                <option value="premium">⭐ Premium</option>
+                <option value="free">📱 Free (14 días)</option>
+                <option value="smart">✨ Smart (14 días)</option>
+                <option value="pro">💎 Pro (30 días)</option>
+                <option value="caducado">⏰ Caducado</option>
               </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Ajusta el plan del usuario. Recuerda confirmar la fecha de expiración.
+              </p>
+            </div>
+
+            {/* Fecha de expiración */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fecha de expiración
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={formData.fecha_expiracion_suscripcion || ''}
+                  onChange={(e) => handleExpirationChange(e.target.value)}
+                  disabled={!showExpirationInput || loading}
+                  className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.fecha_expiracion_suscripcion ? 'border-red-500' : 'border-gray-300'
+                  } disabled:opacity-50`}
+                />
+                {showExpirationInput && (
+                  <button
+                    type="button"
+                    onClick={handleSetRecommendedExpiration}
+                    disabled={loading}
+                    className="px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+                  >
+                    Sugerir +{currentPlan === 'pro' ? 30 : 14} días
+                  </button>
+                )}
+              </div>
+              {showExpirationInput ? (
+                <p className="text-xs text-gray-500 mt-1">
+                  Recomendado: {recommendedDaysLabel} desde hoy. Puedes personalizar la fecha si es necesario.
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  El plan caducado no maneja fecha de expiración.
+                </p>
+              )}
+              {errors.fecha_expiracion_suscripcion && (
+                <p className="mt-1 text-sm text-red-600">{errors.fecha_expiracion_suscripcion}</p>
+              )}
             </div>
 
             {/* Botones */}

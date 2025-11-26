@@ -1,13 +1,114 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
+import { adminApiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rateLimit'
+import { handleError } from '@/lib/errorHandler'
 
 // Force dynamic rendering - Vercel cache buster
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+/**
+ * @swagger
+ * /api/analytics/activities:
+ *   get:
+ *     summary: Obtiene actividades recientes del sistema
+ *     description: Retorna las actividades más recientes del sistema incluyendo transacciones recientes, nuevos usuarios registrados y actualizaciones de suscripción. Ordenadas por timestamp descendente.
+ *     tags: [Analytics]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Actividades recientes obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         example: "trans-123e4567-e89b-12d3-a456-426614174000"
+ *                       type:
+ *                         type: string
+ *                         enum: [transaction, user_registration, subscription]
+ *                       description:
+ *                         type: string
+ *                         example: "Gasto de $150.50"
+ *                       user:
+ *                         type: string
+ *                         example: "Juan Pérez"
+ *                       timestamp:
+ *                         type: string
+ *                         format: date-time
+ *                       amount:
+ *                         type: number
+ *                         description: Solo presente para transacciones
+ *                       status:
+ *                         type: string
+ *                         example: "success"
+ *       401:
+ *         description: No autenticado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       429:
+ *         description: Rate limit excedido (100 requests / 15 minutos)
+ *         headers:
+ *           X-RateLimit-Limit:
+ *             schema:
+ *               type: integer
+ *               example: 100
+ *           Retry-After:
+ *             schema:
+ *               type: integer
+ *               example: 900
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ * 
+ * @route GET /api/analytics/activities
+ * @description Obtiene actividades recientes del sistema
+ * @security Requiere autenticación de administrador (cookie)
+ * @rateLimit 100 requests / 15 minutos
+ */
 export async function GET(request: NextRequest) {
   try {
-    console.log('📋 Fetching recent activities...')
+    // 1. Rate limiting
+    const identifier = getClientIdentifier(request as any);
+    const rateLimitResult = await checkRateLimit(adminApiRateLimit, identifier);
+    if (!rateLimitResult?.success) {
+      logger.warn(`⛔ Rate limit exceeded for ${identifier}`);
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Demasiadas solicitudes. Por favor, intenta más tarde.',
+          retryAfter: rateLimitResult ? new Date(rateLimitResult.reset).toISOString() : 'unknown',
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': rateLimitResult ? Math.ceil((rateLimitResult.reset - Date.now()) / 1000).toString() : '900',
+            'X-RateLimit-Limit': rateLimitResult?.limit.toString() || '200',
+            'X-RateLimit-Remaining': rateLimitResult?.remaining.toString() || '0',
+            'X-RateLimit-Reset': rateLimitResult?.reset.toString() || Date.now().toString(),
+          },
+        }
+      );
+    }
+
+    logger.debug('📋 Fetching recent activities...')
     
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -80,7 +181,7 @@ export async function GET(request: NextRequest) {
     // Limitar a 15 actividades
     const recentActivities = activities.slice(0, 15)
 
-    console.log('📋 Recent activities generated:', recentActivities.length)
+    logger.debug('📋 Recent activities generated:', recentActivities.length)
 
     return NextResponse.json({
       success: true,
@@ -88,11 +189,8 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('💥 Error fetching activities:', (error as Error).message)
-    return NextResponse.json(
-      { success: false, message: `Error interno del servidor: ${(error as Error).message}` },
-      { status: 500 }
-    )
+    logger.error('💥 Error fetching activities:', (error as Error).message)
+    return handleError(error, 'Error al obtener actividades recientes');
   }
 }
 

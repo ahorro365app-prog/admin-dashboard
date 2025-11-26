@@ -1,5 +1,4 @@
 import jwt from 'jsonwebtoken'
-import bcrypt from 'bcryptjs'
 
 // Configuración JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'demo-secret-key-change-in-production'

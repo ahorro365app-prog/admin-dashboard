@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
+  // ⚠️ ENDPOINT DE TEST - SOLO PARA DESARROLLO
+  // Bloquear en producción por seguridad
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Endpoint no disponible en producción' },
+      { status: 404 }
+    );
+  }
+
   try {
     console.log('🔍 Verificando filtro de transacciones de hoy...')
     

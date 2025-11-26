@@ -1,13 +1,126 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
+import { adminApiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rateLimit'
+import { handleError } from '@/lib/errorHandler'
 
 // Force dynamic rendering - Vercel cache buster
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+/**
+ * @swagger
+ * /api/analytics/charts:
+ *   get:
+ *     summary: Obtiene datos para gráficos de analytics
+ *     description: Retorna datos agregados para visualización en gráficos: transacciones de los últimos 7 días, usuarios de los últimos 6 meses, y distribución de suscripciones.
+ *     tags: [Analytics]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Datos de gráficos obtenidos exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     transactions7Days:
+ *                       type: array
+ *                       description: Transacciones por día (últimos 7 días)
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           name:
+ *                             type: string
+ *                             example: "Lun"
+ *                           value:
+ *                             type: integer
+ *                             example: 45
+ *                     users6Months:
+ *                       type: array
+ *                       description: Usuarios por mes (últimos 6 meses)
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           name:
+ *                             type: string
+ *                             example: "Ene"
+ *                           value:
+ *                             type: integer
+ *                             example: 120
+ *                     subscriptionData:
+ *                       type: array
+ *                       description: Distribución de suscripciones
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           name:
+ *                             type: string
+ *                             enum: [Free, Premium]
+ *                           value:
+ *                             type: integer
+ *       401:
+ *         description: No autenticado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       429:
+ *         description: Rate limit excedido (100 requests / 15 minutos)
+ *         headers:
+ *           X-RateLimit-Limit:
+ *             schema:
+ *               type: integer
+ *               example: 100
+ *           Retry-After:
+ *             schema:
+ *               type: integer
+ *               example: 900
+ *       500:
+ *         description: Error interno del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ * 
+ * @route GET /api/analytics/charts
+ * @description Obtiene datos para gráficos de analytics
+ * @security Requiere autenticación de administrador (cookie)
+ * @rateLimit 100 requests / 15 minutos
+ */
 export async function GET(request: NextRequest) {
   try {
-    console.log('📊 Fetching chart data...')
+    // 1. Rate limiting
+    const identifier = getClientIdentifier(request as any);
+    const rateLimitResult = await checkRateLimit(adminApiRateLimit, identifier);
+    if (!rateLimitResult?.success) {
+      logger.warn(`⛔ Rate limit exceeded for ${identifier}`);
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Demasiadas solicitudes. Por favor, intenta más tarde.',
+          retryAfter: rateLimitResult ? new Date(rateLimitResult.reset).toISOString() : 'unknown',
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': rateLimitResult ? Math.ceil((rateLimitResult.reset - Date.now()) / 1000).toString() : '900',
+            'X-RateLimit-Limit': rateLimitResult?.limit.toString() || '200',
+            'X-RateLimit-Remaining': rateLimitResult?.remaining.toString() || '0',
+            'X-RateLimit-Reset': rateLimitResult?.reset.toString() || Date.now().toString(),
+          },
+        }
+      );
+    }
+
+    logger.debug('📊 Fetching chart data...')
     
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -68,7 +181,7 @@ export async function GET(request: NextRequest) {
       { name: 'Premium', value: premiumUsers || 0 }
     ]
 
-    console.log('📊 Chart data generated:', {
+    logger.debug('📊 Chart data generated:', {
       transactions7Days: last7Days.length,
       users6Months: last6Months.length,
       subscriptionData: subscriptionData.length
@@ -84,11 +197,8 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('💥 Error fetching chart data:', (error as Error).message)
-    return NextResponse.json(
-      { success: false, message: `Error interno del servidor: ${(error as Error).message}` },
-      { status: 500 }
-    )
+    logger.error('💥 Error fetching chart data:', (error as Error).message)
+    return handleError(error, 'Error al obtener datos de gráficos');
   }
 }
 

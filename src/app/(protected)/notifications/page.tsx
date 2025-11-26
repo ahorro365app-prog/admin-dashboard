@@ -21,7 +21,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
-import { logger } from '@/lib/logger'
+import { logger } from '../../../lib/logger'
 
 const CORE_API_URL =
   process.env.NEXT_PUBLIC_CORE_API_URL?.replace(/\/$/, '') || 'http://localhost:3000'

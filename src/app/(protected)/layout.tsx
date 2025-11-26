@@ -2,17 +2,20 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { 
-  LayoutDashboard, 
-  Users, 
-  UserCheck, 
-  BarChart3, 
+import { usePathname, useRouter } from 'next/navigation'
+import {
+  LayoutDashboard,
+  Users,
+  UserCheck,
+  BarChart3,
   Settings,
   MessageCircle,
   Menu,
   X,
-  LogOut
+  LogOut,
+  CreditCard,
+  Bell,
+  RefreshCw
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -21,8 +24,11 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Usuarios', href: '/users', icon: Users },
   { name: 'Referidos', href: '/referrals', icon: UserCheck },
+  { name: 'Pagos', href: '/payments', icon: CreditCard },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'WhatsApp Status', href: '/whatsapp-status', icon: MessageCircle },
+  { name: 'Notificaciones', href: '/notifications', icon: Bell },
+  { name: 'Versiones', href: '/versions', icon: RefreshCw },
   { name: 'Configuración', href: '/settings', icon: Settings },
 ]
 
@@ -33,10 +39,38 @@ export default function ProtectedLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const router = useRouter()
 
-  const handleLogout = () => {
-    // TODO: Implementar logout en el Paso 2
-    console.log('Logout')
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Cerrar sidebar móvil si está abierto
+        setSidebarOpen(false)
+        // Redirigir a login
+        router.push('/login')
+      } else {
+        console.error('Error en logout:', data.message)
+        // Fallback: limpiar cookies manualmente
+        document.cookie = 'admin-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+        document.cookie = 'admin-refresh-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+        router.push('/login')
+      }
+    } catch (error) {
+      console.error('Error de conexión en logout:', error)
+      // Fallback: limpiar cookies manualmente
+      document.cookie = 'admin-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      document.cookie = 'admin-refresh-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      router.push('/login')
+    }
   }
 
   return (
@@ -156,4 +190,6 @@ export default function ProtectedLayout({
     </div>
   )
 }
+
+
 

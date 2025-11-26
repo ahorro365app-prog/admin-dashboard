@@ -2,27 +2,28 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, RefreshCcw, Download, Search, Filter, Calendar, User, Activity, AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react'
+import { ArrowLeft, RefreshCcw, Download, Search, User, Activity, AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react'
 
 interface AuditLog {
   id: string
-  timestamp: string
-  userId: string
-  userName: string
+  createdAt: string
+  adminId: string
+  adminEmail: string
   action: string
-  resource: string
-  details: string
-  ipAddress: string
-  userAgent: string
-  status: 'success' | 'error' | 'warning' | 'info'
-  severity: 'low' | 'medium' | 'high' | 'critical'
+  resourceType?: string
+  resourceId?: string
+  targetUserId?: string
+  details?: any
+  ipAddress?: string
+  userAgent?: string
+  status: 'success' | 'error' | 'warning'
+  errorMessage?: string
 }
 
 interface LogFilters {
   search: string
   action: string
   status: string
-  severity: string
   dateFrom: string
   dateTo: string
   userId: string
@@ -37,7 +38,6 @@ export default function AuditLogsPage() {
     search: '',
     action: '',
     status: '',
-    severity: '',
     dateFrom: '',
     dateTo: '',
     userId: ''
@@ -59,102 +59,41 @@ export default function AuditLogsPage() {
       setLoading(true)
       console.log('📋 Fetching audit logs...')
 
-      // Simular logs de auditoría
-      const mockLogs: AuditLog[] = [
-        {
-          id: '1',
-          timestamp: '2025-10-25T02:15:30Z',
-          userId: 'admin-001',
-          userName: 'Administrador',
-          action: 'LOGIN',
-          resource: 'auth',
-          details: 'Inicio de sesión exitoso desde IP 192.168.1.100',
-          ipAddress: '192.168.1.100',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          status: 'success',
-          severity: 'low'
-        },
-        {
-          id: '2',
-          timestamp: '2025-10-25T02:10:15Z',
-          userId: 'user-123',
-          userName: 'Juan Pérez',
-          action: 'CREATE_TRANSACTION',
-          resource: 'transactions',
-          details: 'Transacción creada: Gasto de $50 en Transporte',
-          ipAddress: '192.168.1.101',
-          userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)',
-          status: 'success',
-          severity: 'low'
-        },
-        {
-          id: '3',
-          timestamp: '2025-10-25T02:05:45Z',
-          userId: 'admin-001',
-          userName: 'Administrador',
-          action: 'UPDATE_USER',
-          resource: 'users',
-          details: 'Usuario actualizado: Cambio de suscripción a Premium',
-          ipAddress: '192.168.1.100',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          status: 'success',
-          severity: 'medium'
-        },
-        {
-          id: '4',
-          timestamp: '2025-10-25T01:58:20Z',
-          userId: 'user-456',
-          userName: 'María García',
-          action: 'FAILED_LOGIN',
-          resource: 'auth',
-          details: 'Intento de inicio de sesión fallido - Contraseña incorrecta',
-          ipAddress: '192.168.1.102',
-          userAgent: 'Mozilla/5.0 (Android 12; Mobile; rv:91.0) Gecko/91.0',
-          status: 'error',
-          severity: 'medium'
-        },
-        {
-          id: '5',
-          timestamp: '2025-10-25T01:45:10Z',
-          userId: 'system',
-          userName: 'Sistema',
-          action: 'BACKUP_COMPLETED',
-          resource: 'database',
-          details: 'Respaldo automático completado exitosamente - 2.5 GB',
-          ipAddress: '127.0.0.1',
-          userAgent: 'System/Backup',
-          status: 'success',
-          severity: 'low'
-        },
-        {
-          id: '6',
-          timestamp: '2025-10-25T01:30:55Z',
-          userId: 'admin-001',
-          userName: 'Administrador',
-          action: 'DELETE_USER',
-          resource: 'users',
-          details: 'Usuario eliminado: ID user-789 - Cuenta inactiva',
-          ipAddress: '192.168.1.100',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          status: 'success',
-          severity: 'high'
-        },
-        {
-          id: '7',
-          timestamp: '2025-10-25T01:15:30Z',
-          userId: 'user-789',
-          userName: 'Carlos López',
-          action: 'SUSPICIOUS_ACTIVITY',
-          resource: 'security',
-          details: 'Actividad sospechosa detectada - Múltiples intentos de acceso',
-          ipAddress: '192.168.1.103',
-          userAgent: 'Mozilla/5.0 (Linux; Android 11; SM-G991B)',
-          status: 'warning',
-          severity: 'critical'
-        }
-      ]
+      // Construir query params
+      const params = new URLSearchParams();
+      if (filters.action) params.append('action', filters.action);
+      if (filters.status) params.append('status', filters.status);
+      if (filters.userId) params.append('admin_id', filters.userId);
+      if (filters.dateFrom) params.append('date_from', filters.dateFrom);
+      if (filters.dateTo) params.append('date_to', filters.dateTo);
+      params.append('page', currentPage.toString());
+      params.append('limit', logsPerPage.toString());
 
-      setLogs(mockLogs)
+      const response = await fetch(`/api/audit-logs?${params.toString()}`);
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Error obteniendo logs');
+      }
+
+      // Mapear datos del API al formato esperado
+      const mappedLogs: AuditLog[] = (data.data || []).map((log: any) => ({
+        id: log.id,
+        createdAt: log.createdAt,
+        adminId: log.adminId,
+        adminEmail: log.adminEmail,
+        action: log.action,
+        resourceType: log.resourceType,
+        resourceId: log.resourceId,
+        targetUserId: log.targetUserId,
+        details: log.details,
+        ipAddress: log.ipAddress,
+        userAgent: log.userAgent,
+        status: log.status,
+        errorMessage: log.errorMessage,
+      }));
+
+      setLogs(mappedLogs);
     } catch (error) {
       console.error('💥 Error fetching audit logs:', error)
     } finally {
@@ -181,20 +120,18 @@ export default function AuditLogsPage() {
       filtered = filtered.filter(log => log.status === filters.status)
     }
 
-    if (filters.severity) {
-      filtered = filtered.filter(log => log.severity === filters.severity)
-    }
+    // Severity filter removed - not in new schema
 
     if (filters.userId) {
-      filtered = filtered.filter(log => log.userId.includes(filters.userId))
+      filtered = filtered.filter(log => log.adminId === filters.userId)
     }
 
     if (filters.dateFrom) {
-      filtered = filtered.filter(log => new Date(log.timestamp) >= new Date(filters.dateFrom))
+      filtered = filtered.filter(log => new Date(log.createdAt) >= new Date(filters.dateFrom))
     }
 
     if (filters.dateTo) {
-      filtered = filtered.filter(log => new Date(log.timestamp) <= new Date(filters.dateTo))
+      filtered = filtered.filter(log => new Date(log.createdAt) <= new Date(filters.dateTo))
     }
 
     setFilteredLogs(filtered)
@@ -237,8 +174,8 @@ export default function AuditLogsPage() {
     }
   }
 
-  const formatDate = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString('es-ES', {
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('es-ES', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -250,16 +187,17 @@ export default function AuditLogsPage() {
 
   const handleExport = () => {
     const csvContent = [
-      ['Timestamp', 'Usuario', 'Acción', 'Recurso', 'Detalles', 'IP', 'Estado', 'Severidad'],
+      ['Fecha', 'Admin', 'Acción', 'Tipo Recurso', 'ID Recurso', 'Usuario Objetivo', 'Detalles', 'IP', 'Estado'],
       ...filteredLogs.map(log => [
-        log.timestamp,
-        log.userName,
+        log.createdAt,
+        log.adminEmail,
         log.action,
-        log.resource,
-        log.details,
-        log.ipAddress,
-        log.status,
-        log.severity
+        log.resourceType || '',
+        log.resourceId || '',
+        log.targetUserId || '',
+        JSON.stringify(log.details || {}),
+        log.ipAddress || '',
+        log.status
       ])
     ].map(row => row.join(',')).join('\n')
 
@@ -518,7 +456,7 @@ export default function AuditLogsPage() {
                       Estado
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Severidad
+                      Error
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       IP
@@ -537,23 +475,23 @@ export default function AuditLogsPage() {
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {formatDate(log.timestamp)}
+                        {formatDate(log.createdAt)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <User className="w-4 h-4 text-gray-400 mr-2" />
                           <div>
-                            <div className="text-sm font-medium text-gray-900">{log.userName}</div>
-                            <div className="text-sm text-gray-500">{log.userId}</div>
+                            <div className="text-sm font-medium text-gray-900">{log.adminEmail}</div>
+                            <div className="text-sm text-gray-500">{log.adminId}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{log.action}</div>
-                        <div className="text-sm text-gray-500">{log.resource}</div>
+                        <div className="text-sm text-gray-500">{log.resourceType || 'N/A'}</div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
-                        {log.details}
+                        {log.details ? JSON.stringify(log.details) : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -562,9 +500,11 @@ export default function AuditLogsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(log.severity)}`}>
-                          {log.severity}
-                        </span>
+                        {log.errorMessage && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Error
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {log.ipAddress}

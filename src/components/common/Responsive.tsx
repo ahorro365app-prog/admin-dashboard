@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Menu, X, ChevronDown } from 'lucide-react'
+import { X } from 'lucide-react'
 
 interface ResponsiveContainerProps {
   children: React.ReactNode

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowRight, CheckCircle2, Terminal, FileText, Repeat } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Terminal } from 'lucide-react';
 
 export default function RecuperarSesionPage() {
   const [pasoActual, setPasoActual] = useState(0);

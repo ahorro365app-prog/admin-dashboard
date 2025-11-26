@@ -1,12 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sanitizeDebugData, logDebugAccess } from '@/lib/debug-sanitizer'
 
 // Force dynamic rendering - Vercel cache buster
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
+  // ⚠️ ENDPOINT DE DEBUG - SOLO PARA DESARROLLO
+  // Bloquear en producción por seguridad
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Endpoint no disponible en producción' },
+      { status: 404 }
+    );
+  }
+
   try {
+    // Logging de acceso
+    logDebugAccess('/api/debug/transacciones', request);
+    
     console.log('🔍 Debug: Analizando campos de fecha en transacciones...')
     
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -35,8 +48,14 @@ export async function GET(request: NextRequest) {
       camposPosiblesFecha.some(posible => campo.toLowerCase().includes(posible.toLowerCase()))
     )
 
+    // Sanitizar datos antes de retornar
+    const sanitizedTransacciones = sanitizeDebugData(transacciones);
+    
     console.log('📅 Campos de fecha encontrados:', camposFechaEncontrados)
-    console.log('📊 Muestra de transacciones:', transacciones)
+    console.log('📊 Muestra de transacciones (sanitizada):', {
+      count: sanitizedTransacciones?.length || 0,
+      campos: camposEncontrados
+    })
 
     return NextResponse.json({
       success: true,
@@ -44,7 +63,7 @@ export async function GET(request: NextRequest) {
       data: {
         todosLosCampos: camposEncontrados,
         camposFechaEncontrados,
-        muestraTransacciones: transacciones,
+        muestraTransacciones: sanitizedTransacciones,
         camposPosiblesFecha
       }
     })

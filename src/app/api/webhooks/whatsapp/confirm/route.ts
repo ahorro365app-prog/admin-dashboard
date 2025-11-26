@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { parseConfirmation } from '@/lib/parseConfirmation';
 import { calculateWeightedAccuracy } from '@/lib/calculateWeightedAccuracy';
-
-// Force dynamic rendering - Vercel cache buster
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
+import { handleError, handleNotFoundError } from '@/lib/errorHandler';
+import { logger } from '@/lib/logger';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,68 +19,36 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { prediction_id, phone_number, message } = body;
 
-    console.log(`📝 Confirmación recibida: "${message}"`);
-    console.log(`📱 phone_number recibido del body:`, phone_number);
+    logger.debug(`📝 Confirmación recibida: "${message}"`);
 
     // ============================================================
     // OBTENER USUARIO Y PAÍS
     // ============================================================
     const phoneNumber = phone_number?.replace('@s.whatsapp.net', '') || phone_number;
-    console.log(`📱 phoneNumber después de limpiar:`, phoneNumber);
-    
-    // Intentar buscar con ambos formatos (con y sin +)
-    const phoneWithPlus = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
-    const phoneWithoutPlus = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
-    
-    console.log(`🔍 Buscando usuario con phoneWithPlus:`, phoneWithPlus);
-    console.log(`🔍 Buscando usuario con phoneWithoutPlus:`, phoneWithoutPlus);
-    
-    // Intentar buscar primero con el formato con +
-    let { data: user, error: userError } = await supabase
+    const { data: user } = await supabase
       .from('usuarios')
       .select('id, country_code')
-      .eq('telefono', phoneWithPlus)
+      .eq('telefono', phoneNumber)
       .single();
 
-    // Si no se encontró con +, intentar sin +
-    if (userError || !user) {
-      console.log('⚠️ No encontrado con formato +, intentando sin +...');
-      console.log('⚠️ Error con formato +:', userError);
-      const { data: user2, error: userError2 } = await supabase
-        .from('usuarios')
-        .select('id, country_code')
-        .eq('telefono', phoneWithoutPlus)
-        .single();
-      
-      console.log('🔍 Resultado búsqueda sin +:', { user2, userError2 });
-      user = user2;
-      userError = userError2;
-    }
-
     if (!user) {
-      console.error('❌ Usuario no encontrado con ningún formato');
-      console.error('❌ userError:', userError);
-      return NextResponse.json({
-        success: false,
-        error: 'user not found'
-      }, { status: 404 });
+      return handleNotFoundError('Usuario');
     }
 
     const usuario_id = user.id;
     const country_code = user.country_code || 'BOL';
 
-    console.log(`✅ Usuario encontrado: ${usuario_id}, País: ${country_code}`);
-    console.log(`🔍 Ahora buscando transacciones pendientes para usuario_id: ${usuario_id}`);
+    logger.debug(`✅ Usuario: ${usuario_id}, País: ${country_code}`);
 
     // ============================================================
     // PARSEAR CONFIRMACIÓN
     // ============================================================
     const { type, confidence } = parseConfirmation(message);
-    console.log(`📊 Tipo: ${type}, Confianza: ${confidence}`);
+    logger.debug(`📊 Tipo: ${type}, Confianza: ${confidence}`);
 
     // Si no es confirmación positiva, rechazar
     if (type !== 'confirm') {
-      console.log('⚠️ No es confirmación positiva');
+      logger.warn('⚠️ No es confirmación positiva');
       return NextResponse.json({
         success: false,
         error: 'Respuesta no entendida',
@@ -96,14 +62,10 @@ export async function POST(request: NextRequest) {
     let prediction_id_to_use = prediction_id;
     let parent_message_id: string | null = null;
     
-    console.log(`🔍 prediction_id recibido: ${prediction_id || 'null'}`);
-    
     // Si no viene prediction_id, obtener la transacción pendiente más reciente
     if (!prediction_id_to_use) {
-      console.log('🔍 No hay prediction_id, buscando transacción pendiente más reciente...');
-      console.log('🔍 Query params:', { usuario_id, confirmed: null });
-      
-      const { data: pendingConf, error: pendingError } = await supabase
+      logger.debug('🔍 No hay prediction_id, buscando transacción pendiente más reciente...');
+      const { data: pendingConf } = await supabase
         .from('pending_confirmations')
         .select('prediction_id, parent_message_id')
         .eq('usuario_id', usuario_id)
@@ -112,88 +74,27 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .single();
 
-      console.log('🔍 Resultado query pending_confirmations:', { pendingConf, pendingError });
-      
-      // Si hay error, mostrar más detalles
-      if (pendingError) {
-        console.error('❌ Error en query pending_confirmations:', pendingError);
-        console.error('❌ Error code:', (pendingError as any).code);
-        console.error('❌ Error message:', (pendingError as any).message);
-        console.error('❌ Error details:', (pendingError as any).details);
-      }
-
       if (!pendingConf) {
-        console.log('❌ No se encontró transacción pendiente');
-        
-        // DEBUG: Verificar cuántas transacciones pendientes hay en total para este usuario
-        const { data: allPending, error: allPendingError } = await supabase
-          .from('pending_confirmations')
-          .select('id, prediction_id, parent_message_id, confirmed, created_at')
-          .eq('usuario_id', usuario_id);
-        
-        console.log('🔍 DEBUG: Todas las pending_confirmations para este usuario:', {
-          total: allPending?.length || 0,
-          pendientes: allPending?.filter(p => p.confirmed === null).length || 0,
-          confirmadas: allPending?.filter(p => p.confirmed === true).length || 0,
-          datos: allPending
-        });
-        
-        if (allPendingError) {
-          console.error('❌ Error obteniendo todas las pending_confirmations:', allPendingError);
-        }
-        
-        return NextResponse.json({
-          success: false,
-          message: '❌ No hay ninguna transacción pendiente para confirmar'
-        }, { status: 404 });
+        return handleNotFoundError('Transacción pendiente');
       }
 
       prediction_id_to_use = pendingConf.prediction_id;
       parent_message_id = pendingConf.parent_message_id;
-      console.log(`✅ Transacción pendiente encontrada: ${prediction_id_to_use}`);
-      console.log(`🔍 parent_message_id obtenido: ${parent_message_id || 'null'}`);
+      logger.debug(`✅ Transacción pendiente encontrada: ${prediction_id_to_use}`);
       
-      // Si tenemos parent_message_id, usar ese directamente para buscar todas las del grupo
-      // No necesitamos usar prediction_id_to_use si es múltiple
       if (parent_message_id) {
-        console.log(`✅ Parent message ID detectado: ${parent_message_id} (múltiples TX)`);
-        console.log(`🔄 Buscando todas las transacciones pendientes del grupo ${parent_message_id}...`);
+        logger.debug(`✅ Parent message ID detectado: ${parent_message_id} (múltiples TX)`);
       }
     }
 
     const { data: prediction } = await supabase
       .from('predicciones_groq')
-      .select('resultado, original_timestamp, id, parent_message_id')
+      .select('resultado, original_timestamp, id')
       .eq('id', prediction_id_to_use)
       .single();
 
     if (!prediction) {
-      return NextResponse.json({
-        success: false,
-        error: 'Predicción no encontrada'
-      }, { status: 404 });
-    }
-
-    // Si no obtuvimos parent_message_id en el paso anterior, intentar obtenerlo de la predicción
-    // O si el prediction_id fue proporcionado directamente, también obtener el parent_message_id
-    if (!parent_message_id) {
-      if (prediction.parent_message_id) {
-        parent_message_id = prediction.parent_message_id;
-        console.log(`🔍 parent_message_id obtenido de la predicción: ${parent_message_id}`);
-      } else {
-        // Si no tiene parent_message_id en la predicción, intentar obtenerlo de pending_confirmations
-        const { data: pendingConfForPred } = await supabase
-          .from('pending_confirmations')
-          .select('parent_message_id')
-          .eq('prediction_id', prediction_id_to_use)
-          .is('confirmed', null)
-          .single();
-        
-        if (pendingConfForPred?.parent_message_id) {
-          parent_message_id = pendingConfForPred.parent_message_id;
-          console.log(`🔍 parent_message_id obtenido de pending_confirmations: ${parent_message_id}`);
-        }
-      }
+      return handleNotFoundError('Predicción');
     }
 
     // ============================================================
@@ -203,55 +104,38 @@ export async function POST(request: NextRequest) {
     
     if (parent_message_id) {
       // MODO MÚLTIPLE: Confirmar todas las predicciones del mismo parent_message_id
-      console.log(`📦 MODO MÚLTIPLE: Confirmando grupo ${parent_message_id}`);
-      console.log(`🔍 Buscando todas las pending_confirmations con parent_message_id: ${parent_message_id}`);
+      logger.debug(`📦 MODO MÚLTIPLE: Confirmando grupo ${parent_message_id}`);
       
-      const { data: allGroupPendings, error: groupPendingsError } = await supabase
+      const { data: allGroupPendings } = await supabase
         .from('pending_confirmations')
-        .select('prediction_id, confirmed')
+        .select('prediction_id')
         .eq('usuario_id', usuario_id)
         .eq('parent_message_id', parent_message_id)
         .is('confirmed', null);
       
-      if (groupPendingsError) {
-        console.error(`❌ Error buscando grupo de pending_confirmations:`, groupPendingsError);
-      }
-      
-      console.log(`🔍 Found ${allGroupPendings?.length || 0} pending_confirmations pendientes del grupo`);
-      console.log(`🔍 Prediction IDs encontrados:`, allGroupPendings?.map(p => p.prediction_id) || []);
-      
       if (!allGroupPendings || allGroupPendings.length === 0) {
-        console.log('⚠️ No se encontraron transacciones pendientes del grupo, intentando modo simple...');
-        // Si no hay pendientes del grupo, confirmar solo la que se encontró
-        predictionsToConfirm = [prediction];
-      } else {
-        // Obtener todas las predicciones del grupo
-        const predictionIds = allGroupPendings.map(p => p.prediction_id);
-        console.log(`🔍 Buscando predicciones con IDs:`, predictionIds);
-        
-        const { data: groupPredictions, error: groupPredictionsError } = await supabase
-          .from('predicciones_groq')
-          .select('*')
-          .in('id', predictionIds);
-        
-        if (groupPredictionsError) {
-          console.error(`❌ Error buscando predicciones del grupo:`, groupPredictionsError);
-        }
-        
-        predictionsToConfirm = groupPredictions || [];
-        console.log(`✅ Grupo detectado: ${predictionsToConfirm.length} transacciones a confirmar`);
-        console.log(`🔍 IDs de predicciones a confirmar:`, predictionsToConfirm.map(p => p.id));
+        return handleNotFoundError('Transacciones del grupo');
       }
+      
+      // Obtener todas las predicciones del grupo
+      const predictionIds = allGroupPendings.map(p => p.prediction_id);
+      const { data: groupPredictions } = await supabase
+        .from('predicciones_groq')
+        .select('*')
+        .in('id', predictionIds);
+      
+      predictionsToConfirm = groupPredictions || [];
+      logger.debug(`✅ Grupo detectado: ${predictionsToConfirm.length} transacciones`);
     } else {
       // MODO SIMPLE: Confirmar solo una
-      console.log('📝 MODO SIMPLE: Confirmando 1 transacción');
+      logger.debug('📝 MODO SIMPLE: Confirmando 1 transacción');
       predictionsToConfirm = [prediction];
     }
     
     // Procesar cada predicción
     for (const pred of predictionsToConfirm) {
       // Actualizar predicción
-      const { error: updatePredError } = await supabase
+      await supabase
         .from('predicciones_groq')
         .update({
           confirmado: true,
@@ -260,14 +144,10 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', pred.id);
       
-      if (updatePredError) {
-        console.error(`❌ Error actualizando predicción ${pred.id}:`, updatePredError);
-      } else {
-        console.log(`✅ Predicción ${pred.id} actualizada (MANUAL)`);
-      }
+      logger.debug(`✅ Predicción ${pred.id} actualizada (MANUAL)`);
       
       // Guardar feedback
-      const { error: feedbackError } = await supabase
+      await supabase
         .from('feedback_usuarios')
         .insert({
           prediction_id: pred.id,
@@ -278,13 +158,9 @@ export async function POST(request: NextRequest) {
           confiabilidad: 1.0
         });
       
-      if (feedbackError) {
-        console.error(`❌ Error guardando feedback ${pred.id}:`, feedbackError);
-      }
-      
       // Crear transacción
       if (pred?.resultado) {
-        const { error: txError } = await supabase
+        await supabase
           .from('transacciones')
           .insert({
             usuario_id,
@@ -297,15 +173,11 @@ export async function POST(request: NextRequest) {
             moneda: pred.resultado?.moneda || 'BOB'
           });
         
-        if (txError) {
-          console.error(`❌ Error creando transacción ${pred.id}:`, txError);
-        } else {
-          console.log(`✅ Transacción ${pred.id} creada con timestamp original`);
-        }
+        logger.debug(`✅ Transacción ${pred.id} creada con timestamp original`);
       }
       
       // Marcar confirmación
-      const { error: confirmError } = await supabase
+      await supabase
         .from('pending_confirmations')
         .update({
           confirmed: true,
@@ -313,14 +185,10 @@ export async function POST(request: NextRequest) {
         })
         .eq('prediction_id', pred.id);
       
-      if (confirmError) {
-        console.error(`❌ Error marcando confirmación ${pred.id}:`, confirmError);
-      } else {
-        console.log(`✅ Confirmación pendiente ${pred.id} marcada`);
-      }
+      logger.debug(`✅ Confirmación pendiente ${pred.id} marcada`);
     }
     
-    console.log(`✅ Total confirmadas: ${predictionsToConfirm.length}`);
+    logger.success(`✅ Total confirmadas: ${predictionsToConfirm.length}`);
 
     // ============================================================
     // RECALCULAR ACCURACY PONDERADA
@@ -336,13 +204,13 @@ export async function POST(request: NextRequest) {
       })
       .eq('country_code', country_code);
 
-    console.log(`✅ Accuracy actualizada: ${accuracy}%`);
+    logger.success(`✅ Accuracy actualizada: ${accuracy}%`);
 
     // ============================================================
     // ¿CAMBIAR A AUTOMÁTICO?
     // ============================================================
     if (accuracy >= 90 && verified_count >= 1000) {
-      console.log(`🚀 ALERTA: ${country_code} alcanzó umbrales para AUTO`);
+      logger.success(`🚀 ALERTA: ${country_code} alcanzó umbrales para AUTO`);
       
       await supabase
         .from('feedback_confirmation_config')
@@ -353,7 +221,7 @@ export async function POST(request: NextRequest) {
         })
         .eq('country_code', country_code);
 
-      console.log(`🚀 ${country_code} CAMBIADO A AUTOMÁTICO`);
+      logger.success(`🚀 ${country_code} CAMBIADO A AUTOMÁTICO`);
       return NextResponse.json({
         success: true,
         message: predictionsToConfirm.length > 1 
@@ -375,11 +243,8 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('❌ Error en confirmación:', error);
-    return NextResponse.json({
-      success: false,
-      error: error.message
-    }, { status: 500 });
+    logger.error('❌ Error en confirmación:', error);
+    return handleError(error, 'Error al procesar confirmación de WhatsApp');
   }
 }
 

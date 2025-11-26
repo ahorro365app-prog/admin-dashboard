@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sanitizeDebugData, logDebugAccess } from '@/lib/debug-sanitizer'
 
 export async function GET(request: NextRequest) {
+  // ⚠️ ENDPOINT DE DEBUG - SOLO PARA DESARROLLO
+  // Bloquear en producción por seguridad
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Endpoint no disponible en producción' },
+      { status: 404 }
+    );
+  }
+
   try {
+    // Logging de acceso
+    logDebugAccess('/api/debug/database', request);
+    
     console.log('🔍 Debug: Checking database tables and data...')
     
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -32,25 +45,33 @@ export async function GET(request: NextRequest) {
       .select('*')
       .limit(5)
 
-    console.log('💰 Debts query result:', { debts, error: debtsError })
+    // Sanitizar datos antes de retornar
+    const sanitizedUsers = sanitizeDebugData(users);
+    const sanitizedTransactions = sanitizeDebugData(transactions);
+    const sanitizedDebts = sanitizeDebugData(debts);
+    
+    console.log('💰 Debts query result:', { 
+      count: sanitizedDebts?.length || 0, 
+      error: debtsError?.message 
+    })
 
     return NextResponse.json({
       success: true,
       message: 'Database check completed',
       data: {
         users: {
-          count: users?.length || 0,
-          data: users,
+          count: sanitizedUsers?.length || 0,
+          data: sanitizedUsers,
           error: usersError?.message
         },
         transactions: {
-          count: transactions?.length || 0,
-          data: transactions,
+          count: sanitizedTransactions?.length || 0,
+          data: sanitizedTransactions,
           error: transactionsError?.message
         },
         debts: {
-          count: debts?.length || 0,
-          data: debts,
+          count: sanitizedDebts?.length || 0,
+          data: sanitizedDebts,
           error: debtsError?.message
         }
       }

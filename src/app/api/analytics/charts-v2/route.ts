@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { handleError } from '@/lib/errorHandler'
+import { logger } from '@/lib/logger'
 
 // Forzar renderizado dinámico - VERCEL CACHE BUSTER v2
 export const dynamic = 'force-dynamic'
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
     // Usar nextUrl en lugar de request.url
     const period = request.nextUrl.searchParams.get('period') || '7d'
     
-    console.log('📊 Fetching charts v2 data for period:', period)
+    logger.debug('📊 Fetching charts v2 data for period:', period)
 
     // Datos simulados para evitar problemas de base de datos
     const transactions7Days = [
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
       monthlyGrowth
     }
 
-    console.log('📊 Charts v2 data generated successfully')
+    logger.success('📊 Charts v2 data generated successfully')
 
     return NextResponse.json({
       success: true,
@@ -77,10 +78,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('💥 API Error fetching charts v2:', error)
-    return NextResponse.json(
-      { success: false, message: 'Error interno del servidor', error: (error as Error).message },
-      { status: 500 }
-    )
+    logger.error('💥 API Error fetching charts v2:', error)
+    return handleError(error, 'Error al obtener datos de gráficos v2');
   }
 }
