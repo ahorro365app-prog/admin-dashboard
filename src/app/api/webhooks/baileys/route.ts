@@ -357,21 +357,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-
-      success: true,
-      cached,
-      prediction_id: prediction?.id,
-      transaction_id: prediction?.id, // Para compatibilidad con Worker
-      transcription,
-      expense_data: expenseData,
-      amount: expenseData?.monto || 0,
-      currency: expenseData?.moneda || 'BOB',
-      category: expenseData?.categoria || 'otros',
-      processing_time_ms: Date.now() - startTime,
-      message_type: type,
-      preview_message: previewMessage
-    });
-
   } catch (error: any) {
     logger.error('❌ Error processing Baileys webhook:', error);
     return handleError(error, 'Error al procesar webhook de Baileys');
