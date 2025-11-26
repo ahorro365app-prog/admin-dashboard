@@ -1,8 +1,16 @@
-const { withSentryConfig } = require('@sentry/nextjs')
 const path = require('path')
 
 /** @type {import('next').NextConfig} */
 const isProduction = process.env.NODE_ENV === 'production'
+
+// Sentry es opcional - solo se usa si está instalado y configurado
+let withSentryConfig = null
+try {
+  withSentryConfig = require('@sentry/nextjs').withSentryConfig
+} catch (error) {
+  // Sentry no está instalado o no está disponible - continuar sin él
+  console.warn('⚠️ @sentry/nextjs no está disponible, continuando sin Sentry')
+}
 
 const nextConfig = {
   // Configuración básica para despliegue (solo en producción)
@@ -105,5 +113,10 @@ const sentryWebpackPluginOptions = {
   },
 }
 
-// Exportar con configuración de Sentry
-module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions)
+// Exportar con configuración de Sentry (si está disponible)
+if (withSentryConfig) {
+  module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions)
+} else {
+  // Si Sentry no está disponible, exportar configuración normal
+  module.exports = nextConfig
+}
