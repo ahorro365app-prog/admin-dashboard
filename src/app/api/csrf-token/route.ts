@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCSRFTokenEndpoint } from '@/lib/csrf';
-import { logger } from '@/lib/logger';
 
 /**
  * @swagger
@@ -57,11 +56,27 @@ export async function GET(req: NextRequest) {
     // Aplicar rate limiting aquí bloquearía el funcionamiento normal de la aplicación
     // La seguridad CSRF se mantiene mediante la validación del token en cada request modificadora
     
-    return getCSRFTokenEndpoint(req);
+    // Llamar directamente a getCSRFTokenEndpoint sin try-catch adicional
+    // para que cualquier error se propague correctamente
+    const response = await getCSRFTokenEndpoint(req);
+    return response;
   } catch (error) {
-    logger.error('Error in CSRF token endpoint:', error);
+    // Manejo de errores mejorado
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    console.error('❌ Error in CSRF token endpoint:', {
+      message: errorMessage,
+      stack: errorStack,
+      error
+    });
+    
     return NextResponse.json(
-      { success: false, message: 'Error al generar token CSRF' },
+      { 
+        success: false, 
+        message: 'Error al generar token CSRF',
+        error: errorMessage
+      },
       { status: 500 }
     );
   }
