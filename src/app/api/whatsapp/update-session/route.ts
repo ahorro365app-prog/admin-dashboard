@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { logger } from '@/lib/logger';
 import { adminApiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rateLimit';
 import { handleError, handleValidationError } from '@/lib/errorHandler';
@@ -9,10 +9,7 @@ import { whatsappUpdateSessionSchema, validateWithZod } from '@/lib/validations'
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+
 
 /**
  * @swagger
@@ -109,6 +106,7 @@ const supabase = createClient(
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin();
     // 1. Rate limiting
     const identifier = getClientIdentifier(request as any);
     const rateLimitResult = await checkRateLimit(adminApiRateLimit, identifier);

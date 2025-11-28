@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+/**
+ * Obtiene el cliente de Supabase de forma lazy
+ * Solo se crea cuando se necesita, evitando errores durante el build
+ */
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Supabase configuration is missing. NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -19,6 +29,9 @@ export async function GET(request: NextRequest) {
   const detailedSelect =
     'id, user_id, type, title, body, status, sent_at, delivered_at, opened_at, clicked_at, dismissed_at, last_event_at, error_message, filters, data';
 
+  // Obtener cliente de Supabase de forma lazy
+  const supabase = getSupabaseClient();
+  
   let selectColumns = detailed ? detailedSelect : baseSelect;
 
   let query = supabase

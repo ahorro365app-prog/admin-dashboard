@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { calculateWeightedAccuracy } from '@/lib/calculateWeightedAccuracy';
 import { adminApiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rateLimit';
 import { handleError, handleValidationError } from '@/lib/errorHandler';
@@ -11,11 +11,6 @@ import { requireAuth } from '@/lib/auth-helpers';
 // Force dynamic rendering - Vercel cache buster
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 /**
  * @swagger
@@ -194,6 +189,7 @@ export async function POST(req: NextRequest) {
     // ============================================================
     // OBTENER PREDICCIÓN (para timestamp original y datos anteriores)
     // ============================================================
+    const supabase = getSupabaseAdmin();
     const { data: prediction } = await supabase
       .from('predicciones_groq')
       .select('original_timestamp, resultado, categoria_detectada')

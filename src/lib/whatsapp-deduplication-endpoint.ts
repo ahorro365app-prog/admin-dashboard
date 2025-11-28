@@ -4,12 +4,7 @@
  * El Worker envía wa_message_id en el payload
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-);
+import { getSupabaseAdmin } from './supabaseAdmin';
 
 /**
  * Verifica si un mensaje WhatsApp ya fue procesado
@@ -18,6 +13,7 @@ const supabase = createClient(
 export async function checkDuplicateWhatsAppMessage(waMessageId: string) {
   if (!waMessageId) return null;
 
+  const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('predicciones_groq')
     .select('id, resultado, confirmado, created_at')
@@ -62,6 +58,7 @@ export async function insertPredictionWithDedup(payload: {
   // Poblar categoria_detectada desde resultado.categoria
   const categoria = (payload.resultado as any)?.categoria || 'desconocida';
   
+  const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('predicciones_groq')
     .insert({

@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { parseConfirmation } from '@/lib/parseConfirmation';
 import { calculateWeightedAccuracy } from '@/lib/calculateWeightedAccuracy';
 import { handleError, handleNotFoundError } from '@/lib/errorHandler';
 import { logger } from '@/lib/logger';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 /**
  * Procesa confirmaciones de WhatsApp (sí/ok/perfecto/está bien)
@@ -16,6 +11,8 @@ const supabase = createClient(
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabaseAdmin();
+    
     const body = await request.json();
     const { prediction_id, phone_number, message } = body;
 

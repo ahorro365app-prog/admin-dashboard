@@ -7,10 +7,20 @@ import { logger } from '@/lib/logger';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+/**
+ * Obtiene el cliente de Supabase de forma lazy
+ * Solo se crea cuando se necesita, evitando errores durante el build
+ */
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Supabase configuration is missing. NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 export async function GET(req: NextRequest) {
   try {

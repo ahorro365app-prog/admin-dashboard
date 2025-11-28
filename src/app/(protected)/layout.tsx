@@ -15,7 +15,8 @@ import {
   LogOut,
   CreditCard,
   Bell,
-  RefreshCw
+  RefreshCw,
+  Headphones
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -27,6 +28,7 @@ const navigation = [
   { name: 'Pagos', href: '/payments', icon: CreditCard },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'WhatsApp Status', href: '/whatsapp-status', icon: MessageCircle },
+  { name: 'WhatsApp Soporte', href: '/whatsapp-soporte', icon: Headphones },
   { name: 'Notificaciones', href: '/notifications', icon: Bell },
   { name: 'Versiones', href: '/versions', icon: RefreshCw },
   { name: 'Configuración', href: '/settings', icon: Settings },

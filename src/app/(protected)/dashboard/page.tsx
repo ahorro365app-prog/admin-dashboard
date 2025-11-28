@@ -3,7 +3,8 @@
 import dynamic from 'next/dynamic'
 import { useState, useEffect, useCallback } from 'react'
 import { StatsCards } from '@/components/dashboard/StatsCards'
-import { ActivitiesTable } from '@/components/dashboard/ActivitiesTable'
+import { RecentTransactionsTable } from '@/components/dashboard/RecentTransactionsTable'
+import { RecentRegistrationsTable } from '@/components/dashboard/RecentRegistrationsTable'
 
 // Cargar gráficos sin SSR
 const TransactionsChart = dynamic(() => import('@/components/dashboard/Charts').then(mod => ({ default: mod.TransactionsChart })), { ssr: false })
@@ -22,14 +23,27 @@ interface DashboardData {
     users6Months: Array<{ name: string; value: number }>
     subscriptionData: Array<{ name: string; value: number }>
   }
-  activities: Array<{
+  recentTransactions: Array<{
     id: string
-    type: string
-    description: string
-    user: string
-    timestamp: string
-    amount?: number
-    status: string
+    tipo: 'gasto' | 'ingreso'
+    monto: number
+    fecha: string
+    categoria: string
+    descripcion: string | null
+    usuario: {
+      id: string
+      nombre: string
+      telefono: string | null
+    }
+  }>
+  recentRegistrations: Array<{
+    id: string
+    nombre: string
+    telefono: string
+    pais: string
+    country_code: string
+    suscripcion: 'free' | 'premium' | string
+    created_at: string
   }>
 }
 
@@ -38,6 +52,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [loadingTransactions, setLoadingTransactions] = useState(false)
+  const [loadingRegistrations, setLoadingRegistrations] = useState(false)
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -59,18 +75,19 @@ export default function DashboardPage() {
         throw new Error(chartsData.message)
       }
 
-      // Fetch activities
-      const activitiesResponse = await fetch('/api/analytics/activities')
-      const activitiesData = await activitiesResponse.json()
+      // Fetch recent transactions
+      const transactionsResponse = await fetch('/api/analytics/recent-transactions')
+      const transactionsData = await transactionsResponse.json()
       
-      if (!activitiesData.success) {
-        throw new Error(activitiesData.message)
-      }
+      // Fetch recent registrations (nuevo endpoint)
+      const registrationsResponse = await fetch('/api/analytics/recent-registrations')
+      const registrationsData = await registrationsResponse.json()
 
       setData({
         stats: statsData.data,
         charts: chartsData.data,
-        activities: activitiesData.data
+        recentTransactions: transactionsData.success ? transactionsData.data : [],
+        recentRegistrations: registrationsData.success ? registrationsData.data : []
       })
       
       setLastUpdated(new Date())
@@ -112,6 +129,46 @@ export default function DashboardPage() {
     setLoading(true)
     fetchDashboardData()
   }
+
+  // Función para refrescar solo transacciones
+  const handleRefreshTransactions = useCallback(async () => {
+    try {
+      setLoadingTransactions(true)
+      const transactionsResponse = await fetch('/api/analytics/recent-transactions')
+      const transactionsData = await transactionsResponse.json()
+      
+      if (transactionsData.success && data) {
+        setData({
+          ...data,
+          recentTransactions: transactionsData.data
+        })
+      }
+    } catch (error: any) {
+      console.error('💥 Error refreshing transactions:', error)
+    } finally {
+      setLoadingTransactions(false)
+    }
+  }, [data])
+
+  // Función para refrescar solo registros
+  const handleRefreshRegistrations = useCallback(async () => {
+    try {
+      setLoadingRegistrations(true)
+      const registrationsResponse = await fetch('/api/analytics/recent-registrations')
+      const registrationsData = await registrationsResponse.json()
+      
+      if (registrationsData.success && data) {
+        setData({
+          ...data,
+          recentRegistrations: registrationsData.data
+        })
+      }
+    } catch (error: any) {
+      console.error('💥 Error refreshing registrations:', error)
+    } finally {
+      setLoadingRegistrations(false)
+    }
+  }, [data])
 
   const handleLogout = async () => {
     try {
@@ -218,11 +275,19 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Activities Table */}
-          <ActivitiesTable 
-            activities={data?.activities || []}
-            loading={loading}
-          />
+          {/* Recent Activities - Separated by Type */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <RecentTransactionsTable 
+              transactions={data?.recentTransactions || []}
+              loading={loadingTransactions}
+              onRefresh={handleRefreshTransactions}
+            />
+            <RecentRegistrationsTable 
+              registrations={data?.recentRegistrations || []}
+              loading={loadingRegistrations}
+              onRefresh={handleRefreshRegistrations}
+            />
+          </div>
 
           {/* Quick Actions */}
           <div className="mt-8">

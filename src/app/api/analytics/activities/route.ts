@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 import { logger } from '@/lib/logger'
 import { adminApiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rateLimit'
 import { handleError } from '@/lib/errorHandler'
@@ -9,6 +9,11 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
+ * @deprecated Este endpoint está deprecado. 
+ * Usar en su lugar:
+ * - /api/analytics/recent-transactions para transacciones
+ * - /api/analytics/recent-registrations para registros de usuarios
+ * 
  * @swagger
  * /api/analytics/activities:
  *   get:
@@ -110,10 +115,7 @@ export async function GET(request: NextRequest) {
 
     logger.debug('📋 Fetching recent activities...')
     
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = getSupabaseAdmin()
 
     const activities: any[] = []
 

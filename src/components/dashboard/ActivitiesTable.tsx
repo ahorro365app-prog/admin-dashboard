@@ -1,5 +1,13 @@
 'use client'
 
+/**
+ * @deprecated Este componente está deprecado.
+ * Usar en su lugar:
+ * - RecentTransactionsTable para transacciones
+ * - RecentRegistrationsTable para registros de usuarios
+ * 
+ * Este componente se mantiene por compatibilidad pero ya no se usa en el dashboard.
+ */
 
 interface Activity {
   id: string

@@ -1,9 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Cliente Supabase para Prisma
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const supabase = createClient(supabaseUrl, supabaseServiceKey)
+/**
+ * Obtiene el cliente de Supabase de forma lazy
+ * Solo se crea cuando se necesita, evitando errores durante el build
+ */
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Supabase configuration is missing. NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+// El cliente se obtiene de forma lazy en cada método
 
 // Cliente Prisma simulado usando Supabase
 export const prisma = {
@@ -23,7 +35,8 @@ export const prisma = {
           }
         }
         
-        let query = supabase.from('usuarios').select(selectFields)
+        const client = getSupabaseClient();
+        let query = client.from('usuarios').select(selectFields)
         
         if (where) {
           // Aplicar filtros avanzados
@@ -63,7 +76,8 @@ export const prisma = {
     async findUnique(options: any) {
       const { where, select } = options
       
-      let query = supabase.from('usuarios').select(select ? Object.keys(select).join(', ') : '*')
+      const client = getSupabaseClient();
+      let query = client.from('usuarios').select(select ? Object.keys(select).join(', ') : '*')
       
       if (where.id) {
         query = query.eq('id', where.id)
@@ -80,7 +94,8 @@ export const prisma = {
     async update(options: any) {
       const { where, data: updateData } = options
       
-      const { data, error } = await supabase
+      const client = getSupabaseClient();
+      const { data, error } = await client
         .from('usuarios')
         .update(updateData)
         .eq('id', where.id)
@@ -94,7 +109,8 @@ export const prisma = {
     async delete(options: any) {
       const { where } = options
       
-      const { error } = await supabase
+      const client = getSupabaseClient();
+      const { error } = await client
         .from('usuarios')
         .delete()
         .eq('id', where.id)
@@ -106,7 +122,8 @@ export const prisma = {
     async count(options: any = {}) {
       const { where } = options
       
-      let query = supabase.from('usuarios').select('*', { count: 'exact', head: true })
+      const client = getSupabaseClient();
+      let query = client.from('usuarios').select('*', { count: 'exact', head: true })
       
       if (where) {
         const { OR, ...rest } = where
@@ -218,7 +235,8 @@ export const prisma = {
     async findMany(options: any = {}) {
       const { take = 50, select, where } = options
       
-      let query = supabase.from('transacciones').select(select ? Object.keys(select).join(', ') : '*')
+      const client = getSupabaseClient();
+      let query = client.from('transacciones').select(select ? Object.keys(select).join(', ') : '*')
       
       if (where) {
         Object.keys(where).forEach(key => {
@@ -241,7 +259,8 @@ export const prisma = {
     async count(options: any = {}) {
       const { where } = options
       
-      let query = supabase.from('transacciones').select('*', { count: 'exact', head: true })
+      const client = getSupabaseClient();
+      let query = client.from('transacciones').select('*', { count: 'exact', head: true })
       
       if (where) {
         Object.keys(where).forEach(key => {
@@ -273,7 +292,8 @@ export const prisma = {
     async findMany(options: any = {}) {
       const { take = 50, select, where } = options
       
-      let query = supabase.from('deudas').select(select ? Object.keys(select).join(', ') : '*')
+      const client = getSupabaseClient();
+      let query = client.from('deudas').select(select ? Object.keys(select).join(', ') : '*')
       
       if (where) {
         Object.keys(where).forEach(key => {
@@ -312,7 +332,8 @@ export const prisma = {
 // Función para verificar la conexión
 export async function checkDatabaseConnection() {
   try {
-    const { data, error } = await supabase.from('usuarios').select('id').limit(1)
+    const client = getSupabaseClient();
+    const { data, error } = await client.from('usuarios').select('id').limit(1)
     if (error) throw error
     console.log('✅ Conexión a la base de datos verificada')
     return true

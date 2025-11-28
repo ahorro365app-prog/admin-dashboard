@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 import { logPaymentAction } from '@/lib/audit-logger'
 import { logger } from '@/lib/logger'
 import jwt from 'jsonwebtoken'
@@ -7,11 +7,6 @@ import { requireCSRF } from '@/lib/csrf'
 import { adminApiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rateLimit'
 import { uuidSchema, paymentActionSchema, validateWithZod } from '@/lib/validations'
 import { handleError, handleValidationError, handleAuthError, handleNotFoundError } from '@/lib/errorHandler'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 /**
  * @swagger
@@ -163,6 +158,7 @@ export async function POST(
     }
 
     // 5. Obtener el pago
+    const supabase = getSupabaseAdmin();
     const { data: payment, error: paymentError } = await supabase
       .from('pagos')
       .select('*')

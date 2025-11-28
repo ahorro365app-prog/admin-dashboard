@@ -58,6 +58,23 @@ const nextConfig = {
   },
 
   async headers() {
+    // Construir connect-src con todas las URLs necesarias
+    const coreApiUrl = process.env.NEXT_PUBLIC_CORE_API_URL?.replace(/\/$/, '') || '';
+    const connectSrc = [
+      "'self'",
+      // URLs de desarrollo local
+      'http://localhost:3000',
+      'http://localhost:3002',
+      'ws://localhost:3000',
+      'ws://localhost:3002',
+      // URL de producción si está configurada
+      ...(coreApiUrl && !coreApiUrl.includes('localhost') ? [coreApiUrl] : []),
+      // Servicios externos
+      'https://*.supabase.co',
+      'wss://*.supabase.co',
+      'https://*.sentry.io',
+    ].filter(Boolean).join(' ');
+
     return [
       {
         source: '/(.*)',
@@ -69,7 +86,7 @@ const nextConfig = {
               script-src 'self' 'unsafe-inline' 'unsafe-eval';
               style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
               img-src 'self' data: blob:;
-              connect-src 'self' ${process.env.NEXT_PUBLIC_CORE_API_URL ? process.env.NEXT_PUBLIC_CORE_API_URL.replace(/\/$/, '') : 'http://localhost:3000'} https://*.supabase.co wss://*.supabase.co https://*.sentry.io;
+              connect-src ${connectSrc};
               font-src 'self' https://fonts.gstatic.com;
               frame-src 'self';
             `.replace(/\s+/g, ' ').trim(),

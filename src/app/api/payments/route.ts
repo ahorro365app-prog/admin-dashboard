@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { adminApiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rateLimit'
 import { paymentsQuerySchema, validateWithZod } from '@/lib/validations'
 import { handleError, handleValidationError } from '@/lib/errorHandler'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 
 /**
  * @swagger

@@ -2,26 +2,64 @@ import { createClient } from '@supabase/supabase-js'
 import jwt from 'jsonwebtoken'
 import { comparePassword, isBcryptHash } from './bcrypt-helpers'
 
-// Configuración de Supabase - REEMPLAZAR CON TUS CREDENCIALES REALES
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey // Fallback temporal
+/**
+ * Obtiene el cliente de Supabase de forma lazy
+ * Solo se crea cuando se necesita, evitando errores durante el build
+ */
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Cliente de Supabase con permisos de servicio para operaciones administrativas
-const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Supabase configuration is missing. NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) are required.');
+  }
 
-// Cliente público para operaciones del frontend
-const supabasePublic = createClient(supabaseUrl, supabaseAnonKey)
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+/**
+ * Obtiene el cliente público de Supabase de forma lazy
+ */
+function getSupabasePublicClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase configuration is missing. NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required.');
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey);
+}
+
+// Lazy getters para los clientes
+const supabase = new Proxy({} as ReturnType<typeof createClient>, {
+  get(_target, prop) {
+    return getSupabaseClient()[prop as keyof ReturnType<typeof createClient>];
+  }
+});
+
+const supabasePublic = new Proxy({} as ReturnType<typeof createClient>, {
+  get(_target, prop) {
+    return getSupabasePublicClient()[prop as keyof ReturnType<typeof createClient>];
+  }
+});
 
 // Configuración JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'demo-secret-key-change-in-production'
 const JWT_EXPIRES_IN = '24h'
 const REFRESH_EXPIRES_IN = '7d'
 
-console.log('🔧 Supabase config loaded:')
-console.log('  URL:', supabaseUrl ? 'Set' : 'Not set')
-console.log('  Anon Key:', supabaseAnonKey ? 'Set' : 'Not set')
-console.log('  Service Key:', supabaseServiceKey ? 'Set' : 'Not set (using anon key as fallback)')
+// Logging de configuración (solo en runtime, no durante build)
+if (typeof window === 'undefined' && process.env.NODE_ENV !== 'production') {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  console.log('🔧 Supabase config loaded:')
+  console.log('  URL:', supabaseUrl ? 'Set' : 'Not set')
+  console.log('  Anon Key:', supabaseAnonKey ? 'Set' : 'Not set')
+  console.log('  Service Key:', supabaseServiceKey ? 'Set' : 'Not set (using anon key as fallback)')
+}
 
 export interface AdminUser {
   id: string

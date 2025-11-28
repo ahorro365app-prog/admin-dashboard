@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { groqWhisperService } from '@/services/groqWhisperService';
 import { groqService } from '@/services/groqService';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { insertPredictionWithDedup, checkDuplicateWhatsAppMessage } from '@/lib/whatsapp-deduplication-endpoint';
 import type { GroqTransaction, GroqMultipleResponse } from '@/services/groqService';
 import { handleError, handleValidationError } from '@/lib/errorHandler';
@@ -11,10 +11,6 @@ import { logger, webhookLogger } from '@/lib/logger';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 // Función para construir preview de múltiples transacciones
 function construirPreviewMultiple(transactions: GroqTransaction[], processedType: string): string {
@@ -55,6 +51,9 @@ export async function POST(req: NextRequest) {
     // Texto: { text: string, from: string, type: 'text', timestamp: number }
     const { audioBase64, text, from, type, timestamp, wa_message_id, audioDurationSeconds } = body;
 
+    // Obtener cliente de Supabase de forma lazy
+    const supabase = getSupabaseAdmin();
+    
     // Solo procesar audio o texto
     if (type !== 'audio' && type !== 'text') {
       logger.warn('❌ Message type not supported:', type);
