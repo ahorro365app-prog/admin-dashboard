@@ -87,9 +87,11 @@ export default function TransactionsPanel() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   // Función para construir URL con filtros
-  const buildUrl = useCallback((pageNum: number = 1) => {
+  const buildUrl = useCallback((pageNum: number | string = 1) => {
+    // Asegurar que pageNum sea un número
+    const page = typeof pageNum === 'number' ? pageNum : parseInt(String(pageNum), 10) || 1;
     const params = new URLSearchParams();
-    params.append('page', pageNum.toString());
+    params.append('page', page.toString());
     params.append('limit', '20');
 
     if (filters.search.trim()) {
