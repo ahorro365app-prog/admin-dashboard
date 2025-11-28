@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCSRFTokenEndpoint } from '@/lib/csrf';
-import { adminApiRateLimit, getClientIdentifier, checkRateLimit } from '@/lib/rateLimit';
 import { logger } from '@/lib/logger';
 
 /**
@@ -53,29 +52,11 @@ import { logger } from '@/lib/logger';
  */
 export async function GET(req: NextRequest) {
   try {
-    // 1. Rate limiting (más generoso para CSRF token ya que se llama frecuentemente)
-    const identifier = getClientIdentifier(req as any);
-    const rateLimitResult = await checkRateLimit(adminApiRateLimit, identifier);
-    if (!rateLimitResult?.success) {
-      logger.warn(`⛔ Rate limit exceeded for ${identifier}`);
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Demasiadas solicitudes. Por favor, intenta más tarde.',
-          retryAfter: rateLimitResult ? new Date(rateLimitResult.reset).toISOString() : 'unknown',
-        },
-        {
-          status: 429,
-          headers: {
-            'Retry-After': rateLimitResult ? Math.ceil((rateLimitResult.reset - Date.now()) / 1000).toString() : '900',
-            'X-RateLimit-Limit': rateLimitResult?.limit.toString() || '200',
-            'X-RateLimit-Remaining': rateLimitResult?.remaining.toString() || '0',
-            'X-RateLimit-Reset': rateLimitResult?.reset.toString() || Date.now().toString(),
-          },
-        }
-      );
-    }
-
+    // NOTA: Rate limiting DESHABILITADO para endpoint CSRF
+    // El endpoint CSRF es crítico y se llama en cada página load y antes de cada request POST/PUT/DELETE
+    // Aplicar rate limiting aquí bloquearía el funcionamiento normal de la aplicación
+    // La seguridad CSRF se mantiene mediante la validación del token en cada request modificadora
+    
     return getCSRFTokenEndpoint(req);
   } catch (error) {
     logger.error('Error in CSRF token endpoint:', error);
