@@ -123,13 +123,18 @@ export async function validateCSRFToken(
  * Establece el token CSRF en una cookie HttpOnly
  */
 export function setCSRFTokenCookie(response: NextResponse, token: string): void {
-  response.cookies.set(CSRF_COOKIE_NAME, token, {
-    httpOnly: true, // No accesible desde JavaScript
-    secure: process.env.NODE_ENV === 'production', // Solo HTTPS en producción
-    sameSite: 'strict', // Protección CSRF
-    maxAge: CSRF_TOKEN_EXPIRY,
-    path: '/',
-  });
+  try {
+    response.cookies.set(CSRF_COOKIE_NAME, token, {
+      httpOnly: true, // No accesible desde JavaScript
+      secure: process.env.NODE_ENV === 'production', // Solo HTTPS en producción
+      sameSite: 'lax', // Cambiado de 'strict' a 'lax' para mejor compatibilidad
+      maxAge: CSRF_TOKEN_EXPIRY,
+      path: '/',
+    });
+  } catch (error) {
+    console.error('Error setting CSRF cookie:', error);
+    // No lanzar error, solo loggear - la cookie es opcional si el token está en el body
+  }
 }
 
 /**
