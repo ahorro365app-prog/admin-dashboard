@@ -6,31 +6,37 @@ import { Redis } from '@upstash/redis';
  * Requiere variables de entorno:
  * - UPSTASH_REDIS_REST_URL
  * - UPSTASH_REDIS_REST_TOKEN
+ * 
+ * Si no están configuradas, el rate limiting se desactiva (modo desarrollo)
  */
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || '',
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
-});
+const hasRedisConfig = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+
+const redis = hasRedisConfig ? new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+}) : null as any; // Type assertion para evitar errores de tipo
 
 /**
  * Rate limiter para login admin (5 intentos por 15 minutos)
+ * Si Redis no está configurado, retorna siempre success
  */
-export const adminLoginRateLimit = new Ratelimit({
+export const adminLoginRateLimit = hasRedisConfig ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(5, '15 m'),
   analytics: true,
   prefix: '@upstash/ratelimit/admin-login',
-});
+}) : null;
 
 /**
  * Rate limiter para API admin (200 requests por 15 minutos)
+ * Si Redis no está configurado, retorna siempre success
  */
-export const adminApiRateLimit = new Ratelimit({
+export const adminApiRateLimit = hasRedisConfig ? new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(200, '15 m'),
   analytics: true,
   prefix: '@upstash/ratelimit/admin-api',
-});
+}) : null;
 
 /**
  * Obtiene el identificador del cliente desde la request
@@ -60,11 +66,22 @@ export function getClientIdentifier(req: Request): string {
 
 /**
  * Verifica rate limit y retorna respuesta si excede el límite
+ * Si rateLimiter es null (Redis no configurado), siempre retorna success
  */
 export async function checkRateLimit(
-  rateLimiter: Ratelimit,
+  rateLimiter: Ratelimit | null,
   identifier: string
 ): Promise<{ success: boolean; limit: number; remaining: number; reset: number } | null> {
+  // Si Redis no está configurado, permitir todas las requests
+  if (!rateLimiter) {
+    return {
+      success: true,
+      limit: 0,
+      remaining: 0,
+      reset: 0,
+    };
+  }
+
   try {
     const { success, limit, remaining, reset } = await rateLimiter.limit(identifier);
     
